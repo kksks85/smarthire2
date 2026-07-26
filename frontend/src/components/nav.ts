@@ -1,0 +1,82 @@
+import type { Role } from "../types";
+
+export interface NavModule {
+  label: string;
+  path: string;
+  roles: Role[];
+}
+
+export interface NavGroup {
+  title: string;
+  modules: NavModule[];
+}
+
+const ALL: Role[] = [
+  "admin",
+  "manager",
+  "recruiter",
+  "institution",
+  "employer",
+  "field_agent",
+];
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Overview",
+    modules: [{ label: "Dashboard", path: "/", roles: ALL }],
+  },
+  {
+    title: "Candidate Data Bank",
+    modules: [
+      { label: "All Candidates", path: "/candidates", roles: ["admin", "manager", "recruiter", "field_agent"] },
+      { label: "Register Candidate", path: "/candidates/new", roles: ["admin", "manager", "recruiter", "field_agent"] },
+      { label: "Inbound Leads", path: "/leads", roles: ["admin", "manager", "recruiter"] },
+    ],
+  },
+  {
+    title: "Jobs & Requisitions",
+    modules: [
+      { label: "Job Postings", path: "/jobs", roles: ["admin", "manager", "recruiter", "employer"] },
+      { label: "Create Job", path: "/jobs/new", roles: ["admin", "manager", "recruiter", "employer"] },
+      { label: "Approvals", path: "/approvals", roles: ["admin", "manager"] },
+    ],
+  },
+  {
+    title: "Recruitment",
+    modules: [
+      { label: "My Assignments", path: "/assignments", roles: ["recruiter", "manager", "admin"] },
+      { label: "Interview Pipeline", path: "/pipeline", roles: ["admin", "manager", "recruiter"] },
+      { label: "KYC Verification", path: "/kyc", roles: ["admin", "manager", "recruiter"] },
+    ],
+  },
+  {
+    title: "Field Operations",
+    modules: [
+      { label: "Field Check-in (GPS)", path: "/field/checkin", roles: ["field_agent", "admin", "manager"] },
+      { label: "Registration Drives", path: "/field/drives", roles: ["admin", "manager"] },
+      { label: "PII View Log", path: "/pii-log", roles: ["admin", "manager"] },
+      { label: "Mailbox", path: "/mailbox", roles: ["admin", "manager", "recruiter", "field_agent"] },
+    ],
+  },
+  {
+    title: "Partners",
+    modules: [
+      { label: "Institutions", path: "/institutions", roles: ["admin", "manager", "institution"] },
+      { label: "Employers (Clients)", path: "/employers", roles: ["admin", "manager", "employer"] },
+    ],
+  },
+  {
+    title: "Administration",
+    modules: [
+      { label: "Users & Roles", path: "/admin/users", roles: ["admin"] },
+      { label: "Screening Questions", path: "/admin/screening", roles: ["admin"] },
+      { label: "Interview Stages", path: "/admin/stages", roles: ["admin"] },
+      { label: "Email Accounts", path: "/admin/email/accounts", roles: ["admin"] },
+      { label: "Email Templates", path: "/admin/email/templates", roles: ["admin", "manager"] },
+      { label: "Email Rules", path: "/admin/email/rules", roles: ["admin", "manager"] },
+      { label: "Public Sharing", path: "/admin/public-sharing", roles: ALL },
+      { label: "Reports", path: "/reports", roles: ["admin", "manager", "recruiter"] },
+      { label: "Audit / PII Access", path: "/admin/audit", roles: ["admin"] },
+    ],
+  },
+];
