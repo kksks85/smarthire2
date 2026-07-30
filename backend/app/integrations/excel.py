@@ -1,5 +1,6 @@
 """Excel bulk-upload parsing for institution candidate loads."""
 
+import csv
 import io
 from typing import Any
 
@@ -25,6 +26,15 @@ COLUMN_MAP = {
     "certification": "certification",
     "languages": "languages",
     "expected salary": "expected_salary",
+}
+
+INSTITUTION_TEMPLATE_COLUMNS = {
+    **COLUMN_MAP,
+    "institution name": "institution_name",
+    "institution": "institution_name",
+    "college": "institution_name",
+    "primary trade": "primary_trade",
+    "skill": "primary_trade",
 }
 
 CAMPAIGN_HEADERS = [
@@ -72,6 +82,44 @@ def parse_candidate_workbook(content: bytes) -> tuple[list[dict[str, Any]], list
                     record.pop(int_field)
         rows.append(record)
 
+    return rows, errors
+
+
+def parse_institution_csv(content: bytes) -> tuple[list[dict[str, Any]], list[str]]:
+    """Parse the institution placement-officer CSV template."""
+    errors: list[str] = []
+    rows: list[dict[str, Any]] = []
+    text = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        return [], ["CSV header row is missing."]
+
+    fieldnames = [name.strip().lower() for name in reader.fieldnames if name]
+    required = {"name", "phone", "trade"}
+    if not required.issubset(set(fieldnames)):
+        missing = ", ".join(required - set(fieldnames))
+        return [], [f"CSV is missing required columns: {missing}."]
+
+    for idx, raw in enumerate(reader, start=2):
+        record: dict[str, Any] = {}
+        for key, value in raw.items():
+            if key is None:
+                continue
+            clean_key = key.strip().lower()
+            field = INSTITUTION_TEMPLATE_COLUMNS.get(clean_key)
+            if field and value is not None and str(value).strip() != "":
+                record[field] = str(value).strip()
+        if not record.get("full_name") or not record.get("phone") or not record.get("primary_trade"):
+            errors.append(f"Row {idx}: missing required Name, Phone or Trade - skipped.")
+            continue
+        record["phone"] = "".join(ch for ch in record["phone"] if ch.isdigit())
+        for int_field in ("experience_years", "expected_salary"):
+            if int_field in record:
+                try:
+                    record[int_field] = int(float(record[int_field]))
+                except (ValueError, TypeError):
+                    record.pop(int_field)
+        rows.append(record)
     return rows, errors
 
 

@@ -16,6 +16,7 @@ from app.models.audit import AgentLocationLog
 from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.models.kyc import KycDocument
+from app.models.org import InstitutionUploadLog
 from app.models.pipeline import Application
 from app.models.user import User, Role
 from app.schemas.dashboard import DashboardOut, KpiCard
@@ -64,6 +65,32 @@ def _count_candidates_this_month(db: Session, agent_id: int) -> int:
         )
     )
     return db.scalar(stmt) or 0
+
+
+def _recent_uploads(db: Session, institution_id: int) -> int:
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    stmt = (
+        select(func.count())
+        .select_from(InstitutionUploadLog)
+        .where(
+            and_(
+                InstitutionUploadLog.institution_id == institution_id,
+                func.date(InstitutionUploadLog.created_at) >= month_start,
+            )
+        )
+    )
+    return db.scalar(stmt) or 0
+
+
+def _last_upload_status(db: Session, institution_id: int) -> str | None:
+    stmt = (
+        select(InstitutionUploadLog.status)
+        .where(InstitutionUploadLog.institution_id == institution_id)
+        .order_by(InstitutionUploadLog.created_at.desc())
+        .limit(1)
+    )
+    return db.scalar(stmt)
 
 
 @router.get("", response_model=DashboardOut)
@@ -185,13 +212,55 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             ),
         ]
     elif role == RoleName.INSTITUTION.value:
+        inst_id = current_user.institution_id
         cards = [
             KpiCard(
-                label="Candidates Uploaded",
+                label="Total Candidates Uploaded",
+                value=_count(db, Candidate, Candidate.institution_id == inst_id),
+                hint="Students shared with Layam Group",
+                link="/institution/candidates",
+            ),
+            KpiCard(
+                label="Placed from Institute",
                 value=_count(
-                    db, Candidate, Candidate.institution_id == current_user.institution_id
+                    db,
+                    Candidate,
+                    Candidate.institution_id == inst_id,
+                    Candidate.status == CandidateStatus.PLACED,
                 ),
-                link="/candidates",
+                hint="Successfully placed candidates",
+                link="/institution/candidates?status=placed",
+            ),
+            KpiCard(
+                label="In Process / Shortlisted",
+                value=_count(
+                    db,
+                    Candidate,
+                    Candidate.institution_id == inst_id,
+                    Candidate.status.in_([CandidateStatus.IN_PROCESS, CandidateStatus.SHORTLISTED]),
+                ),
+                hint="Active in recruitment pipeline",
+                link="/institution/candidates",
+            ),
+            KpiCard(
+                label="Awaiting Screening",
+                value=_count(
+                    db, Candidate, Candidate.institution_id == inst_id, Candidate.status == CandidateStatus.NEW
+                ),
+                hint="Yet to be contacted by recruiters",
+                link="/institution/candidates?status=new",
+            ),
+            KpiCard(
+                label="Recent Uploads",
+                value=_recent_uploads(db, inst_id),
+                hint="Uploads this month",
+                link="/institution/uploads",
+            ),
+            KpiCard(
+                label="Last Upload Status",
+                value=1,
+                hint=(_last_upload_status(db, inst_id) or "No uploads").replace("_", " ").title(),
+                link="/institution/uploads",
             ),
         ]
     elif role == RoleName.EMPLOYER.value:

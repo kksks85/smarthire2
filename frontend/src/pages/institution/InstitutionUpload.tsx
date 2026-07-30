@@ -1,0 +1,124 @@
+import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../../api/client";
+import { PageHead } from "../../components/ui";
+import type { InstitutionUploadSummary } from "../../types";
+
+const TEMPLATE_COLUMNS = [
+  "Institution Name",
+  "Trade",
+  "Name",
+  "Phone",
+  "Email",
+  "Gender",
+  "City",
+  "State",
+  "Pincode",
+  "Experience",
+  "Education",
+  "Certification",
+  "Languages",
+  "Expected Salary",
+];
+
+export default function InstitutionUpload() {
+  const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [summary, setSummary] = useState<InstitutionUploadSummary | null>(null);
+
+  function downloadCsvTemplate() {
+    const header = TEMPLATE_COLUMNS.join(",");
+    const example = [
+      "ABC Institute of Technology",
+      "Electrician",
+      "Ravi Kumar",
+      "9876543210",
+      "ravi@example.com",
+      "Male",
+      "Pune",
+      "Maharashtra",
+      "411001",
+      "2",
+      "ITI",
+      "ITI Electrician",
+      "Hindi, Marathi",
+      "18000",
+    ].join(",");
+    const blob = new Blob([header + "\n" + example + "\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "smarthire-institution-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function upload() {
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setError("Select an Excel or CSV file to upload.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setSummary(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post<InstitutionUploadSummary>("/institutions/me/upload-candidates", formData);
+      setSummary(data);
+    } catch (err: any) {
+      setError(err.response?.data?.detail ?? "Upload failed. Please check the file and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <PageHead
+        title="Upload Candidates"
+        breadcrumb="Institution Portal › Upload Candidates"
+      />
+      <div className="card">
+        <div className="card-head">Upload File</div>
+        <div className="card-body">
+          <div className="inline-note">
+            Upload an Excel (.xlsx) or CSV file using the institution template.
+            <strong> Trade, Name and Phone </strong> are mandatory for every row.
+          </div>
+          <div className="btn-row" style={{ margin: "14px 0" }}>
+            <button className="btn" onClick={downloadCsvTemplate}>Download CSV Template</button>
+            <span className="muted">Excel template: same headers as the CSV.</span>
+          </div>
+          <div className="field">
+            <label>File (.xlsx or .csv)</label>
+            <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" />
+          </div>
+          {error && <div className="error-note" style={{ marginTop: 12 }}>{error}</div>}
+          {summary && (
+            <div className="success-note" style={{ marginTop: 12 }}>
+              Uploaded <strong>{summary.created}</strong> candidates.
+              {summary.skipped > 0 && <> Skipped <strong>{summary.skipped}</strong> rows.</>}
+              {summary.errors && summary.errors.length > 0 && (
+                <ul style={{ marginTop: 8 }}>
+                  {summary.errors.slice(0, 10).map((err: string, idx: number) => <li key={idx}>{err}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="btn-row" style={{ marginTop: 14 }}>
+            <button className="btn primary" onClick={upload} disabled={busy}>
+              {busy ? "Uploading…" : "Upload Candidates"}
+            </button>
+            <button className="btn" onClick={() => navigate("/institution/uploads")}>
+              View Upload Logs
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

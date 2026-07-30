@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 from app.models.mixins import TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.candidate import Candidate
 
 
 class Institution(Base, TimestampMixin):
@@ -24,6 +27,35 @@ class Institution(Base, TimestampMixin):
     state: Mapped[Optional[str]] = mapped_column(String(100))
     address: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(default=True)
+
+    upload_logs: Mapped[list["InstitutionUploadLog"]] = relationship(
+        back_populates="institution",
+        cascade="all, delete-orphan",
+        order_by="InstitutionUploadLog.created_at.desc()",
+    )
+
+
+class InstitutionUploadLog(Base, TimestampMixin):
+    """Audit trail for candidate bulk uploads by an institution/placement officer."""
+
+    __tablename__ = "institution_upload_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    registered_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(10), nullable=False)  # xlsx, csv
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="success")  # success, partial, failed
+    errors: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=dict)
+
+    institution: Mapped["Institution"] = relationship(back_populates="upload_logs")
 
 
 class Employer(Base, TimestampMixin):

@@ -70,6 +70,26 @@ export interface CampaignImportResult {
   errors: string[];
 }
 
+export interface InstitutionUploadLog {
+  id: number;
+  institution_id: number;
+  registered_by_id: number;
+  filename: string;
+  file_type: "xlsx" | "csv";
+  total_rows: number;
+  created_count: number;
+  skipped_count: number;
+  status: "success" | "partial" | "failed";
+  errors?: { row_errors?: string[] } | null;
+  created_at: string;
+}
+
+export interface InstitutionUploadSummary {
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
 export interface CandidatePii {
   id: number;
   phone: string;

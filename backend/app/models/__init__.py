@@ -12,7 +12,7 @@ from app.models.field_drive import FieldDrive
 from app.models.job import JobApproval, JobPosting
 from app.models.kyc import KycDocument
 from app.models.lead import LeadInbound
-from app.models.org import Employer, Institution
+from app.models.org import Employer, Institution, InstitutionUploadLog
 from app.models.pipeline import (
     Application,
     InterviewStageConfig,
@@ -43,6 +43,7 @@ __all__ = [
     "LeadInbound",
     "Employer",
     "Institution",
+    "InstitutionUploadLog",
     "Application",
     "InterviewStageConfig",
     "RecruiterContactAttempt",

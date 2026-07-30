@@ -67,6 +67,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "Institution Portal",
+    modules: [
+      { label: "Dashboard", path: "/institution", roles: ["institution"] },
+      { label: "Upload Candidates", path: "/institution/upload", roles: ["institution"] },
+      { label: "My Candidates", path: "/institution/candidates", roles: ["institution"] },
+      { label: "Upload Logs", path: "/institution/uploads", roles: ["institution"] },
+    ],
+  },
+  {
     title: "Administration",
     modules: [
       { label: "Users & Roles", path: "/admin/users", roles: ["admin"] },

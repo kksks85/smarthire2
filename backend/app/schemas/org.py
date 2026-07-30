@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -21,6 +22,28 @@ class InstitutionOut(InstitutionBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     is_active: bool
+
+
+class InstitutionUploadLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    institution_id: int
+    registered_by_id: int
+    filename: str
+    file_type: str
+    total_rows: int
+    created_count: int
+    skipped_count: int
+    status: str
+    errors: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+
+class InstitutionUploadSummary(BaseModel):
+    created: int
+    skipped: int
+    errors: list[str]
 
 
 class EmployerBase(BaseModel):

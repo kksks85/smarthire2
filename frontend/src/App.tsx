@@ -34,6 +34,10 @@ import ReportBuilder from "./pages/reports/ReportBuilder";
 import ReportViewer from "./pages/reports/ReportViewer";
 import PublicApply from "./pages/PublicApply";
 import PublicDriveApply from "./pages/PublicDriveApply";
+import InstitutionDashboard from "./pages/institution/InstitutionDashboard";
+import InstitutionUpload from "./pages/institution/InstitutionUpload";
+import InstitutionCandidates from "./pages/institution/InstitutionCandidates";
+import InstitutionUploadLogs from "./pages/institution/InstitutionUploadLogs";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -89,6 +93,10 @@ export default function App() {
         <Route path="/reports/new" element={<ReportBuilder />} />
         <Route path="/reports/:id" element={<ReportViewer />} />
         <Route path="/reports/:id/edit" element={<ReportBuilder />} />
+        <Route path="/institution" element={<InstitutionDashboard />} />
+        <Route path="/institution/upload" element={<InstitutionUpload />} />
+        <Route path="/institution/candidates" element={<InstitutionCandidates />} />
+        <Route path="/institution/uploads" element={<InstitutionUploadLogs />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
