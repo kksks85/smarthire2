@@ -37,32 +37,65 @@ COLUMN_MAP = {
     "expected salary": "expected_salary",
 }
 
-INSTITUTION_TEMPLATE_COLUMNS = {
-    **COLUMN_MAP,
-    "institution name": "institution_name",
+def _clean_header(name: str) -> str:
+    """Normalize a CSV header: lower, strip, collapse spaces, remove common non-alphanumerics."""
+    text = "".join(ch for ch in name.lower().strip() if ch.isalnum() or ch.isspace() or ch == "/")
+    return "".join(text.split()).replace("/", "")
+
+
+_INSTITUTION_HEADER_ALIASES = {
+    "studentname": "full_name",
+    "name": "full_name",
+    "fullname": "full_name",
+    "full name": "full_name",
+    "mobilenumber": "phone",
+    "mobile": "phone",
+    "phone": "phone",
+    "gender": "gender",
+    "dateofbirthage": "date_of_birth",
+    "dateofbirth": "date_of_birth",
+    "age": "date_of_birth",
+    "qualification": "education_level",
+    "education": "education_level",
+    "coursetradespecialization": "primary_trade",
+    "coursetrade": "primary_trade",
+    "course": "primary_trade",
+    "trade": "primary_trade",
+    "specialization": "primary_trade",
+    "primarytrade": "primary_trade",
+    "skill": "primary_trade",
+    "passingyearexpectedpassingyear": "passing_year",
+    "passingyear": "passing_year",
+    "expectedpassingyear": "passing_year",
+    "currentstatuscurrentstuddentalumni": "current_status",
+    "currentstatus": "current_status",
+    "preferredjobrole": "preferred_job_role",
+    "jobrole": "preferred_job_role",
+    "district": "city",
+    "city": "city",
+    "state": "state",
+    "willingtorelocateyesno": "willing_to_relocate",
+    "willingtorelocate": "willing_to_relocate",
+    "fresherexperienced": "experience_level",
+    "experiencelevel": "experience_level",
+    "experiencemonthsyears": "experience_years",
+    "experience": "experience_years",
+    "experienceyears": "experience_years",
+    "remarksspecialskills": "remarks",
+    "remarks": "remarks",
+    "specialskills": "remarks",
+    "institutionname": "institution_name",
     "institution": "institution_name",
     "college": "institution_name",
-    "primary trade": "primary_trade",
-    "skill": "primary_trade",
-    "course / trade / specialization": "primary_trade",
-    "course / trade": "primary_trade",
-    "course": "primary_trade",
-    "specialization": "primary_trade",
-    "date of birth / age": "date_of_birth",
-    "date of birth": "date_of_birth",
-    "age": "date_of_birth",
-    "passing year / expected passing year": "passing_year",
-    "passing year": "passing_year",
-    "expected passing year": "passing_year",
-    "current status (current student / alumni)": "current_status",
-    "current status": "current_status",
-    "preferred job role": "preferred_job_role",
-    "fresher / experienced": "experience_level",
-    "willing to relocate (yes/no)": "willing_to_relocate",
-    "willing to relocate": "willing_to_relocate",
-    "remarks / special skills": "remarks",
-    "remarks": "remarks",
-    "special skills": "remarks",
+    "pincode": "pincode",
+    "certification": "certification",
+    "languages": "languages",
+    "expectedsalary": "expected_salary",
+}
+
+INSTITUTION_TEMPLATE_COLUMNS = {
+    **COLUMN_MAP,
+    **_INSTITUTION_HEADER_ALIASES,
 }
 
 CAMPAIGN_HEADERS = [
@@ -122,27 +155,32 @@ def parse_institution_csv(content: bytes) -> tuple[list[dict[str, Any]], list[st
     if not reader.fieldnames:
         return [], ["CSV header row is missing."]
 
-    fieldnames = [name.strip().lower() for name in reader.fieldnames if name]
+    fieldnames = [_clean_header(name) for name in reader.fieldnames if name]
     required = {
-        "student name",
-        "mobile number",
-        "course / trade / specialization",
+        "studentname",
+        "mobilenumber",
+        "coursetradespecialization",
     }
     if not required.issubset(set(fieldnames)):
         missing = ", ".join(required - set(fieldnames))
-        return [], [f"CSV is missing required columns: {missing}."]
+        return [], [f"CSV is missing required columns: {missing}. Detected headers: {fieldnames}"]
 
+    header_map = {_clean_header(key): key for key in reader.fieldnames if key}
     for idx, raw in enumerate(reader, start=2):
         record: dict[str, Any] = {}
         for key, value in raw.items():
             if key is None:
                 continue
-            clean_key = key.strip().lower()
+            clean_key = _clean_header(key)
             field = INSTITUTION_TEMPLATE_COLUMNS.get(clean_key)
             if field and value is not None and str(value).strip() != "":
                 record[field] = str(value).strip()
         if not record.get("full_name") or not record.get("phone") or not record.get("primary_trade"):
-            errors.append(f"Row {idx}: missing required Name, Phone or Trade - skipped.")
+            errors.append(
+                f"Row {idx}: missing required Student Name / Mobile Number / Trade - "
+                f"found full_name={bool(record.get('full_name'))} phone={bool(record.get('phone'))} "
+                f"trade={bool(record.get('primary_trade'))}."
+            )
             continue
         record["phone"] = "".join(ch for ch in record["phone"] if ch.isdigit())
         for int_field in ("experience_years", "expected_salary"):
