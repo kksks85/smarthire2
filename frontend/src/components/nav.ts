@@ -29,7 +29,8 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Candidate Data Bank",
     modules: [
       { label: "All Candidates", path: "/candidates", roles: ["admin", "manager", "recruiter", "field_agent"] },
-      { label: "Register Candidate", path: "/candidates/new", roles: ["admin", "manager", "recruiter", "field_agent"] },
+      { label: "Register Candidate", path: "/candidates/new", roles: ["admin", "manager", "recruiter"] },
+      { label: "Quick Register", path: "/candidates/new?quick=1", roles: ["field_agent"] },
       { label: "Inbound Leads", path: "/leads", roles: ["admin", "manager", "recruiter"] },
     ],
   },

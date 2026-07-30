@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../api/client";
-import { Badge, PageHead } from "../../components/ui";
-import type { Candidate } from "../../types";
+import { Badge, Modal, PageHead } from "../../components/ui";
+import type { Candidate, CandidatePii } from "../../types";
 
 interface StudentCentralCandidate extends Candidate {
   institution_name?: string | null;
@@ -15,6 +15,7 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "primary_trade", label: "Trade" },
   { key: "phone", label: "Phone" },
   { key: "gender", label: "Gender" },
+  { key: "date_of_birth", label: "Date of Birth" },
   { key: "education_level", label: "Qualification" },
   { key: "experience_years", label: "Experience (Years)" },
   { key: "expected_salary", label: "Expected Salary" },
@@ -32,6 +33,7 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "preferred_job_role", label: "Preferred Job Role" },
   { key: "experience_level", label: "Fresher / Experienced" },
   { key: "remarks", label: "Remarks / Special Skills" },
+  { key: "actions", label: "Actions" },
 ];
 
 const DEFAULT_COLUMNS: ColumnKey[] = [
@@ -42,6 +44,7 @@ const DEFAULT_COLUMNS: ColumnKey[] = [
   "city",
   "state",
   "status",
+  "actions",
 ];
 
 function getCellValue(candidate: StudentCentralCandidate, key: ColumnKey): string {
@@ -70,14 +73,20 @@ export default function StudentCentral() {
   const [offset, setOffset] = useState(0);
   const [showColumns, setShowColumns] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<ColumnKey[]>(() => {
-    const saved = localStorage.getItem("sh_student_central_columns");
+    const saved = localStorage.getItem("sh_student_central_columns_v2");
     return saved ? JSON.parse(saved) : DEFAULT_COLUMNS;
   });
+  const [reveal, setReveal] = useState<{ c: StudentCentralCandidate; pii: CandidatePii } | null>(null);
   const limit = 50;
 
   useEffect(() => {
-    localStorage.setItem("sh_student_central_columns", JSON.stringify(selectedColumns));
+    localStorage.setItem("sh_student_central_columns_v2", JSON.stringify(selectedColumns));
   }, [selectedColumns]);
+
+  async function doReveal(c: StudentCentralCandidate) {
+    const { data } = await api.post<CandidatePii>(`/candidates/${c.id}/reveal`);
+    setReveal({ c, pii: data });
+  }
 
   function load() {
     const params: Record<string, string> = { limit: String(limit), offset: String(offset) };
@@ -119,6 +128,11 @@ export default function StudentCentral() {
   return (
     <div>
       <PageHead title="Student Central" breadcrumb="Administration › Student Central" />
+      <div className="inline-note">
+        Phone numbers and personal details are masked by default. Selecting
+        <strong> Reveal </strong> is recorded in the PII access audit log against your user.
+      </div>
+
       <div className="list-toolbar">
         <input placeholder="Search name…" value={q} onChange={(e) => setQ(e.target.value)} />
         <input placeholder="Trade…" value={trade} onChange={(e) => setTrade(e.target.value)} />
@@ -166,7 +180,15 @@ export default function StudentCentral() {
               <tr key={c.id}>
                 {visibleColumns.map((col) => (
                   <td key={col.key} className={col.key === "phone" ? "pii" : ""}>
-                    {col.key === "status" ? <Badge value={c.status} /> : getCellValue(c, col.key)}
+                    {col.key === "status" ? (
+                      <Badge value={c.status} />
+                    ) : col.key === "actions" ? (
+                      <button className="btn link" onClick={() => doReveal(c)}>
+                        Reveal
+                      </button>
+                    ) : (
+                      getCellValue(c, col.key)
+                    )}
                   </td>
                 ))}
               </tr>
@@ -191,6 +213,28 @@ export default function StudentCentral() {
           Next
         </button>
       </div>
+
+      {reveal && (
+        <Modal title={`PII — ${reveal.c.full_name}`} onClose={() => setReveal(null)}>
+          <div className="inline-note">
+            This reveal has been logged to the audit trail.
+          </div>
+          <div className="form-grid one-col" style={{ border: "none", padding: 0 }}>
+            <div className="field">
+              <label>Phone</label>
+              <input readOnly value={reveal.pii.phone} />
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input readOnly value={reveal.pii.email ?? "—"} />
+            </div>
+            <div className="field">
+              <label>Address</label>
+              <textarea readOnly value={reveal.pii.address ?? "—"} rows={2} />
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

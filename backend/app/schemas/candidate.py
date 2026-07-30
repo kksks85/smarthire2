@@ -114,6 +114,24 @@ class StudentCentralOut(CandidateOut):
     institution_name: Optional[str] = None
 
 
+class QuickCandidateCreate(BaseModel):
+    """Minimal candidate record created by a field agent on the spot.
+
+    Name, Phone, Email, and Aadhaar are required. All other details
+    can be completed later through the full candidate form.
+    """
+
+    full_name: str
+    phone: str
+    email: str
+    aadhaar_last4: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+    primary_trade: Optional[str] = None
+    source: CandidateSource = CandidateSource.FIELD_AGENT
+    field_drive_id: Optional[int] = None
+
+
 class PublicRegistration(BaseModel):
     """Public self-registration via QR / website (no auth)."""
 

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.admin import get_public_base_url
@@ -38,13 +38,58 @@ _VIEWERS = require_roles(
 @router.get("", response_model=list[JobOut])
 def list_jobs(
     status: JobStatus | None = None,
+    with_stats: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(_VIEWERS),
 ):
     stmt = select(JobPosting).order_by(JobPosting.created_at.desc())
     if status:
         stmt = stmt.where(JobPosting.status == status)
-    return db.scalars(stmt).all()
+    jobs = db.scalars(stmt).all()
+    if not with_stats:
+        return jobs
+
+    from app.core.enums import ApplicationStatus
+    from app.models.pipeline import Application
+
+    job_ids = [j.id for j in jobs]
+    counts: dict[int, dict[str, int]] = {j.id: {
+        "interested": 0,
+        "contact_successful": 0,
+        "blocked_for_position": 0,
+    } for j in jobs}
+    if job_ids:
+        rows = db.execute(
+            select(Application.job_id, Application.status, func.count(Application.id))
+            .where(
+                Application.job_id.in_(job_ids),
+                Application.status.in_([
+                    ApplicationStatus.INTERESTED,
+                    ApplicationStatus.CONTACT_SUCCESSFUL,
+                    ApplicationStatus.BLOCKED_FOR_POSITION,
+                ]),
+            )
+            .group_by(Application.job_id, Application.status)
+        ).all()
+        for job_id, app_status, count in rows:
+            bucket = {
+                ApplicationStatus.INTERESTED: "interested",
+                ApplicationStatus.CONTACT_SUCCESSFUL: "contact_successful",
+                ApplicationStatus.BLOCKED_FOR_POSITION: "blocked_for_position",
+            }.get(app_status)
+            if bucket:
+                counts[job_id][bucket] = count
+
+    result = []
+    for job in jobs:
+        data = JobOut.model_validate(job).model_dump()
+        data["stats"] = counts.get(job.id, {
+            "interested": 0,
+            "contact_successful": 0,
+            "blocked_for_position": 0,
+        })
+        result.append(data)
+    return result
 
 
 @router.post("", response_model=JobOut, status_code=201)

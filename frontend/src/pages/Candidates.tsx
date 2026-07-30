@@ -15,17 +15,19 @@ export default function Candidates() {
   const [trade, setTrade] = useState(searchParams.get("trade") || "");
   const [state, setState] = useState(searchParams.get("state") || "");
   const [status, setStatus] = useState(searchParams.get("status") || "");
+  const [offset, setOffset] = useState(parseInt(searchParams.get("offset") || "0", 10));
   const [reveal, setReveal] = useState<{ c: Candidate; pii: CandidatePii } | null>(
     null
   );
   const [showCampaignImport, setShowCampaignImport] = useState(false);
+  const limit = 50;
   const [campaignResult, setCampaignResult] = useState<CampaignImportResult | null>(null);
   const [campaignError, setCampaignError] = useState("");
   const [campaignBusy, setCampaignBusy] = useState(false);
   const campaignFileRef = useRef<HTMLInputElement>(null);
 
   function load() {
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { limit: String(limit), offset: String(offset) };
     if (q) params.q = q;
     if (trade) params.trade = trade;
     if (state) params.state = state;
@@ -45,9 +47,18 @@ export default function Candidates() {
     if (trade) next.trade = trade;
     if (state) next.state = state;
     if (status) next.status = status;
+    if (offset > 0) next.offset = String(offset);
     setSearchParams(next, { replace: true });
+  }, [q, trade, state, status, offset]);
+
+  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, trade, state, status, offset]);
+
+  // Reset to first page when filters change.
+  useEffect(() => {
+    setOffset(0);
   }, [q, trade, state, status]);
 
   async function doReveal(c: Candidate) {
@@ -142,7 +153,7 @@ export default function Candidates() {
           )}
         </select>
         <div className="spacer" />
-        <span className="muted">{total} records</span>
+        <span className="muted">{Math.min(total, offset + items.length)} of {total} records</span>
       </div>
 
       <table className="sn-table">
@@ -195,6 +206,24 @@ export default function Candidates() {
           )}
         </tbody>
       </table>
+
+      <div className="btn-row" style={{ marginTop: 12 }}>
+        <button
+          className="btn"
+          onClick={() => setOffset((o) => Math.max(0, o - limit))}
+          disabled={offset === 0}
+        >
+          Previous
+        </button>
+        <span className="muted">Page {Math.floor(offset / limit) + 1}</span>
+        <button
+          className="btn"
+          onClick={() => setOffset((o) => o + limit)}
+          disabled={offset + limit >= total}
+        >
+          Next
+        </button>
+      </div>
 
       {reveal && (
         <Modal title={`PII — ${reveal.c.full_name}`} onClose={() => setReveal(null)}>

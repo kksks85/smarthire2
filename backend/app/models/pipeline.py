@@ -55,6 +55,8 @@ class Application(Base, TimestampMixin):
     contact_attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     candidate_interest: Mapped[Optional[bool]] = mapped_column(Boolean)
     interest_recorded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    blocked_for_position_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    qualified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     released_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     release_reason: Mapped[Optional[str]] = mapped_column(Text)
 

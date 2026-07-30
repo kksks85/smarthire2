@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.enums import CandidateSource
+from app.core.enums import ApplicationStatus, CandidatePoolStatus, CandidateSource
 from app.db.session import get_db
 from app.models.candidate import Candidate
 from app.models.field_drive import FieldDrive
 from app.models.job import JobPosting
+from app.models.pipeline import Application
 from app.models.user import User
 from app.schemas.candidate import PublicRegistration
 from app.schemas.field_drive import PublicDriveInfo
@@ -58,7 +59,11 @@ def public_drive(slug: str, db: Session = Depends(get_db)):
 
 @router.post("/register", status_code=201)
 def public_register(body: PublicRegistration, db: Session = Depends(get_db)):
-    """Candidate self-registration via QR code / website (no auth)."""
+    """Candidate self-registration via QR code / website (no auth).
+
+    When the registration is tied to a job slug, a candidate record is created
+    (or linked by phone) and an application is created with status INTERESTED.
+    """
     drive: FieldDrive | None = None
     if body.drive_slug:
         drive = db.scalar(
@@ -80,21 +85,62 @@ def public_register(body: PublicRegistration, db: Session = Depends(get_db)):
     else:
         source = CandidateSource.WEBSITE
 
-    candidate = Candidate(
-        full_name=body.full_name,
-        phone=body.phone,
-        email=body.email,
-        city=body.city,
-        state=body.state,
-        primary_trade=body.primary_trade,
-        experience_years=body.experience_years or 0,
-        source=source,
-        registered_by_id=drive.field_agent_id if drive else None,
-        field_drive_id=drive.id if drive else None,
-        profile_data={"registration_channel": body.registration_channel} if body.registration_channel else {},
-    )
-    db.add(candidate)
-    db.flush()
+    job: JobPosting | None = None
+    if body.job_slug:
+        job = db.scalar(
+            select(JobPosting).where(
+                JobPosting.public_slug == body.job_slug,
+                JobPosting.status == JobStatus.PUBLISHED,
+            )
+        )
+
+    # Link to existing candidate by phone when possible.
+    phone_digits = "".join(ch for ch in (body.phone or "") if ch.isdigit())
+    existing = db.scalar(select(Candidate).where(Candidate.phone == phone_digits)) if phone_digits else None
+
+    if existing:
+        candidate = existing
+        candidate.full_name = body.full_name or candidate.full_name
+        candidate.email = body.email or candidate.email
+        candidate.city = body.city or candidate.city
+        candidate.state = body.state or candidate.state
+        candidate.primary_trade = body.primary_trade or candidate.primary_trade
+    else:
+        candidate = Candidate(
+            full_name=body.full_name,
+            phone=body.phone,
+            email=body.email,
+            city=body.city,
+            state=body.state,
+            primary_trade=body.primary_trade,
+            experience_years=body.experience_years or 0,
+            source=source,
+            registered_by_id=drive.field_agent_id if drive else None,
+            field_drive_id=drive.id if drive else None,
+            profile_data={"registration_channel": body.registration_channel} if body.registration_channel else {},
+        )
+        db.add(candidate)
+        db.flush()
+
     capture_candidate_registration(db, candidate)
+
+    if job and candidate.id:
+        existing_app = db.scalar(
+            select(Application).where(
+                Application.candidate_id == candidate.id,
+                Application.job_id == job.id,
+                Application.status == ApplicationStatus.INTERESTED,
+            )
+        )
+        if not existing_app:
+            db.add(Application(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                status=ApplicationStatus.INTERESTED,
+                candidate_interest=True,
+            ))
+            if candidate.pool_status == CandidatePoolStatus.AVAILABLE:
+                candidate.pool_status = CandidatePoolStatus.RESERVED
+
     db.commit()
-    return {"message": "Registration received. Our team will contact you shortly."}
+    return {"message": "Registration received. Our team will contact you shortly.", "candidate_id": candidate.id}

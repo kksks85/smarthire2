@@ -14,6 +14,7 @@ from app.schemas.candidate import (
     CandidateOut,
     CandidatePii,
     CandidateUpdate,
+    QuickCandidateCreate,
     StudentCentralOut,
 )
 from app.services.audit import record_pii_access
@@ -205,6 +206,38 @@ def create_candidate(
     if payload.get("field_drive_id"):
         payload["source"] = CandidateSource.FIELD_AGENT
     candidate = Candidate(**payload, registered_by_id=current_user.id)
+    db.add(candidate)
+    db.flush()
+    capture_candidate_registration(db, candidate)
+    db.commit()
+    db.refresh(candidate)
+    return serialize_masked(candidate)
+
+
+@router.post("/quick", response_model=CandidateOut, status_code=201)
+def create_quick_candidate(
+    body: QuickCandidateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    """Minimal on-the-spot candidate registration for field agents.
+
+    Only name, phone, email, and aadhaar are required. The full profile
+    can be completed later through the standard candidate form.
+    """
+    candidate = Candidate(
+        full_name=body.full_name,
+        phone=body.phone,
+        email=body.email,
+        aadhaar_last4=body.aadhaar_last4,
+        city=body.city,
+        state=body.state,
+        primary_trade=body.primary_trade,
+        source=CandidateSource.FIELD_AGENT,
+        registered_by_id=current_user.id,
+        field_drive_id=body.field_drive_id,
+        profile_data={"quick_registration": True},
+    )
     db.add(candidate)
     db.flush()
     capture_candidate_registration(db, candidate)

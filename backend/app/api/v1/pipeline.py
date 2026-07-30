@@ -69,6 +69,11 @@ _CONTACT_OUTCOMES = {
     "other",
 }
 _ACTIVE_STATUSES = {
+    ApplicationStatus.INTERESTED,
+    ApplicationStatus.CONTACT_ATTEMPTED,
+    ApplicationStatus.CONTACT_SUCCESSFUL,
+    ApplicationStatus.UNABLE_TO_REACH,
+    ApplicationStatus.NOT_INTERESTED,
     ApplicationStatus.ASSIGNED,
     ApplicationStatus.CONTACT_PENDING,
     ApplicationStatus.SCREENING,
@@ -77,6 +82,8 @@ _ACTIVE_STATUSES = {
     ApplicationStatus.KYC,
     ApplicationStatus.VALIDATED,
     ApplicationStatus.SELECTED,
+    ApplicationStatus.BLOCKED_FOR_POSITION,
+    ApplicationStatus.QUALIFIED,
 }
 
 
@@ -222,8 +229,6 @@ def create_application(
     candidate = db.get(Candidate, body.candidate_id)
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    if candidate.pool_status != CandidatePoolStatus.AVAILABLE:
-        raise HTTPException(status_code=409, detail="Candidate is not available in the resource pool")
 
     app_row = Application(
         candidate_id=body.candidate_id,
@@ -233,11 +238,55 @@ def create_application(
         status=ApplicationStatus.CONTACT_PENDING,
     )
     db.add(app_row)
-    candidate.pool_status = CandidatePoolStatus.RESERVED
+    if candidate.pool_status == CandidatePoolStatus.AVAILABLE:
+        candidate.pool_status = CandidatePoolStatus.RESERVED
 
     record_audit(
         db, user_id=current_user.id, action="application.create",
         entity_type="application", entity_id=None, commit=False,
+    )
+    db.commit()
+    db.refresh(app_row)
+    return app_row
+
+
+@router.post("/applications/interest", response_model=ApplicationOut, status_code=201)
+def register_interest(
+    body: ApplicationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    """Record candidate interest in a job from any source (website, social, agent, etc.)."""
+    candidate = db.get(Candidate, body.candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    existing = db.scalar(
+        select(Application).where(
+            Application.candidate_id == body.candidate_id,
+            Application.job_id == body.job_id,
+            Application.status.in_(_ACTIVE_STATUSES),
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Candidate has already expressed interest in this job")
+
+    app_row = Application(
+        candidate_id=body.candidate_id,
+        job_id=body.job_id,
+        assigned_recruiter_id=body.assigned_recruiter_id,
+        assigned_by_id=current_user.id,
+        status=ApplicationStatus.INTERESTED,
+        candidate_interest=True,
+        interest_recorded_at=datetime.now(timezone.utc),
+    )
+    db.add(app_row)
+    if candidate.pool_status == CandidatePoolStatus.AVAILABLE:
+        candidate.pool_status = CandidatePoolStatus.RESERVED
+
+    record_audit(
+        db, user_id=current_user.id, action="application.interest",
+        entity_type="application", entity_id=None, detail="interested", commit=False,
     )
     db.commit()
     db.refresh(app_row)
@@ -274,7 +323,13 @@ def record_contact_attempt(
     _ensure_application_access(app_row, current_user)
     if current_user.role.name != RoleName.RECRUITER:
         raise HTTPException(status_code=403, detail="Only the assigned recruiter can record contact attempts")
-    if app_row.status not in (ApplicationStatus.ASSIGNED, ApplicationStatus.CONTACT_PENDING):
+    if app_row.status not in (
+        ApplicationStatus.INTERESTED,
+        ApplicationStatus.CONTACT_ATTEMPTED,
+        ApplicationStatus.UNABLE_TO_REACH,
+        ApplicationStatus.ASSIGNED,
+        ApplicationStatus.CONTACT_PENDING,
+    ):
         raise HTTPException(status_code=400, detail="Contact attempts are no longer available for this application")
     if body.outcome not in _CONTACT_OUTCOMES:
         raise HTTPException(status_code=400, detail="Unsupported contact outcome")
@@ -295,10 +350,15 @@ def record_contact_attempt(
     ))
     app_row.contact_attempt_count += 1
     if body.outcome == "candidate_not_interested":
+        app_row.status = ApplicationStatus.NOT_INTERESTED
         app_row.candidate_interest = False
         _release_to_pool(db, app_row, body.notes or "Candidate not interested")
-    elif body.outcome != "connected" and app_row.contact_attempt_count >= 3:
-        _release_to_pool(db, app_row, "Three unsuccessful contact attempts")
+    elif body.outcome == "connected":
+        app_row.status = ApplicationStatus.CONTACT_SUCCESSFUL
+    else:
+        app_row.status = ApplicationStatus.CONTACT_ATTEMPTED if app_row.contact_attempt_count < 3 else ApplicationStatus.UNABLE_TO_REACH
+        if app_row.contact_attempt_count >= 3:
+            _release_to_pool(db, app_row, "Three unsuccessful contact attempts")
     record_audit(
         db, user_id=current_user.id, action="application.contact_attempt",
         entity_type="application", entity_id=app_row.id, detail=body.outcome, commit=False,
@@ -321,7 +381,13 @@ def record_candidate_interest(
     _ensure_application_access(app_row, current_user)
     if current_user.role.name != RoleName.RECRUITER:
         raise HTTPException(status_code=403, detail="Only the assigned recruiter can record candidate interest")
-    if app_row.status not in (ApplicationStatus.ASSIGNED, ApplicationStatus.CONTACT_PENDING):
+    if app_row.status not in (
+        ApplicationStatus.INTERESTED,
+        ApplicationStatus.CONTACT_ATTEMPTED,
+        ApplicationStatus.CONTACT_SUCCESSFUL,
+        ApplicationStatus.ASSIGNED,
+        ApplicationStatus.CONTACT_PENDING,
+    ):
         raise HTTPException(status_code=400, detail="Candidate interest is already recorded for this application")
     connected = db.scalar(
         select(RecruiterContactAttempt.id).where(
@@ -340,11 +406,40 @@ def record_candidate_interest(
             candidate.pool_status = CandidatePoolStatus.IN_PROCESS
             candidate.status = CandidateStatus.IN_PROCESS
     else:
+        app_row.status = ApplicationStatus.NOT_INTERESTED
         _release_to_pool(db, app_row, body.notes or "Candidate not interested")
     record_audit(
         db, user_id=current_user.id, action="application.interest",
         entity_type="application", entity_id=app_row.id,
         detail="interested" if body.interested else "not_interested", commit=False,
+    )
+    db.commit()
+    db.refresh(app_row)
+    return app_row
+
+
+@router.post("/applications/{application_id}/qualify", response_model=ApplicationOut)
+def qualify_application(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    """Mark an application as qualified / blocked for the position."""
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    if app_row.status in (ApplicationStatus.RELEASED, ApplicationStatus.PLACED, ApplicationStatus.REJECTED):
+        raise HTTPException(status_code=400, detail="This application is already closed")
+    app_row.status = ApplicationStatus.BLOCKED_FOR_POSITION
+    app_row.blocked_for_position_at = datetime.now(timezone.utc)
+    candidate = db.get(Candidate, app_row.candidate_id)
+    if candidate:
+        candidate.pool_status = CandidatePoolStatus.RESERVED
+        candidate.status = CandidateStatus.SHORTLISTED
+    record_audit(
+        db, user_id=current_user.id, action="application.qualify",
+        entity_type="application", entity_id=app_row.id, detail="blocked_for_position", commit=False,
     )
     db.commit()
     db.refresh(app_row)

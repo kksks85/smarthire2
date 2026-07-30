@@ -119,6 +119,11 @@ export interface Job {
   published_at?: string | null;
   created_by_id: number;
   required_candidate_fields?: { fields?: string[]; documents?: string[] } | null;
+  stats?: {
+    interested: number;
+    contact_successful: number;
+    blocked_for_position: number;
+  };
 }
 
 export interface PublishInfo {

@@ -17,6 +17,11 @@ const STAGES = [
 ];
 
 const APP_STATUSES = [
+  "interested",
+  "contact_attempted",
+  "contact_successful",
+  "unable_to_reach",
+  "not_interested",
   "assigned",
   "contact_pending",
   "screening",
@@ -27,6 +32,8 @@ const APP_STATUSES = [
   "validated",
   "shortlisted",
   "selected",
+  "blocked_for_position",
+  "qualified",
   "on_hold",
   "rejected",
   "placed",
@@ -44,6 +51,7 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
   const [recruiters, setRecruiters] = useState<User[]>([]);
   const [active, setActive] = useState<Application | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "");
+  const [jobFilter, setJobFilter] = useState<string>(searchParams.get("job_id") || "");
 
   const canAssign = user?.role === "manager" || user?.role === "admin";
 
@@ -51,6 +59,7 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
     const params: Record<string, any> = {};
     if (mineOnly && user) params.recruiter_id = user.id;
     if (statusFilter) params.status = statusFilter;
+    if (jobFilter) params.job_id = jobFilter;
     const { data } = await api.get<Application[]>("/applications", { params });
     setApps(data);
 
@@ -76,10 +85,13 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
     }
   }
   useEffect(() => {
-    setSearchParams(statusFilter ? { status: statusFilter } : {}, { replace: true });
+    const next: Record<string, string> = {};
+    if (statusFilter) next.status = statusFilter;
+    if (jobFilter) next.job_id = jobFilter;
+    setSearchParams(next, { replace: true });
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mineOnly, statusFilter]);
+  }, [mineOnly, statusFilter, jobFilter]);
 
   async function assign(appId: number, recruiterId: number) {
     await api.post(`/applications/${appId}/assign`, {
@@ -104,6 +116,15 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
             <option key={s} value={s}>
               {s.replace(/_/g, " ")}
             </option>
+          ))}
+        </select>
+        <select
+          value={jobFilter}
+          onChange={(e) => setJobFilter(e.target.value)}
+        >
+          <option value="">All jobs</option>
+          {Object.values(jobs).map((j) => (
+            <option key={j.id} value={j.id}>{j.title}</option>
           ))}
         </select>
         <div className="spacer" />
@@ -183,21 +204,25 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
 }
 
 function stageLabel(application: Application) {
-  if (application.status === "assigned" || application.status === "contact_pending") return "Contact";
+  if (["interested", "assigned", "contact_pending", "contact_attempted", "contact_successful", "unable_to_reach", "not_interested"].includes(application.status)) return "Contact";
   if (application.status === "documents") return "Documents";
   if (application.status === "validated") return "Validated / Placement";
   if (application.status === "on_hold") return "On hold";
   if (application.status === "released") return "Returned to pool";
+  if (application.status === "blocked_for_position") return "Blocked for position";
+  if (application.status === "qualified") return "Qualified";
+  if (application.status === "not_interested") return "Not interested";
+  if (application.status === "unable_to_reach") return "Unable to reach";
   return STAGES.find((stage) => stage.key === application.current_stage_type)?.label ?? application.current_stage_type;
 }
 
 function isTerminal(status: string) {
-  return ["released", "placed", "rejected", "withdrawn", "closed"].includes(status);
+  return ["released", "placed", "rejected", "withdrawn", "closed", "not_interested", "unable_to_reach"].includes(status);
 }
 
 function Workflow({ application }: { application: Application }) {
   const steps = ["contact", "screening", "client_interview", "document_verification", "kyc", "placement"];
-  const stage = application.status === "assigned" || application.status === "contact_pending" ? "contact" : application.current_stage_type;
+  const stage = ["interested", "assigned", "contact_pending", "contact_attempted", "contact_successful", "unable_to_reach", "not_interested"].includes(application.status) ? "contact" : application.current_stage_type;
   const step = Math.max(0, steps.indexOf(stage));
   const released = application.status === "released";
   return (
@@ -215,7 +240,8 @@ function nextAction(application: Application, openWorkflow: () => void, manageDo
   if (application.status === "documents" || application.status === "kyc") {
     return <><button className="btn primary" onClick={manageDocuments}>Files</button><button className="btn link" onClick={openWorkflow}>Decision</button></>;
   }
-  const label = application.status === "contact_pending" || application.status === "assigned" ? "Record contact" : "Open workflow";
+  const contactStatuses = new Set(["interested", "contact_pending", "assigned", "contact_attempted", "contact_successful", "unable_to_reach"]);
+  const label = contactStatuses.has(application.status) ? "Record contact" : "Open workflow";
   return <button className="btn primary" onClick={openWorkflow}>{label}</button>;
 }
 

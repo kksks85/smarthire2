@@ -54,6 +54,11 @@ class ApprovalDecision(str, enum.Enum):
 
 
 class ApplicationStatus(str, enum.Enum):
+    INTERESTED = "interested"
+    CONTACT_ATTEMPTED = "contact_attempted"
+    CONTACT_SUCCESSFUL = "contact_successful"
+    UNABLE_TO_REACH = "unable_to_reach"
+    NOT_INTERESTED = "not_interested"
     ASSIGNED = "assigned"
     CONTACT_PENDING = "contact_pending"
     SCREENING = "screening"
@@ -62,6 +67,8 @@ class ApplicationStatus(str, enum.Enum):
     KYC = "kyc"
     VALIDATED = "validated"
     SELECTED = "selected"
+    BLOCKED_FOR_POSITION = "blocked_for_position"
+    QUALIFIED = "qualified"
     ON_HOLD = "on_hold"
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"

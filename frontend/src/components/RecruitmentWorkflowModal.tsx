@@ -22,7 +22,15 @@ interface Props {
   onCompleted: () => void;
 }
 
-const CONTACT_STATUSES = new Set(["assigned", "contact_pending"]);
+const CONTACT_STATUSES = new Set([
+  "interested",
+  "contact_attempted",
+  "contact_successful",
+  "unable_to_reach",
+  "not_interested",
+  "assigned",
+  "contact_pending",
+]);
 const WORKFLOW_STEPS = [
   { key: "contact", label: "Contact" },
   { key: "screening", label: "Screening" },
@@ -31,6 +39,16 @@ const WORKFLOW_STEPS = [
   { key: "kyc", label: "KYC" },
   { key: "placement", label: "Placement" },
 ];
+
+const CONTACT_OUTCOME_LABELS: Record<string, string> = {
+  connected: "Connected successfully",
+  no_answer: "No answer",
+  wrong_number: "Wrong number",
+  phone_switched_off: "Phone switched off",
+  call_back_later: "Call back later",
+  candidate_not_interested: "Candidate not interested",
+  other: "Other",
+};
 
 export default function RecruitmentWorkflowModal({
   application,
@@ -125,6 +143,19 @@ export default function RecruitmentWorkflowModal({
     }
   }
 
+  async function blockForPosition() {
+    setError("");
+    setBusy(true);
+    try {
+      await api.post(`/applications/${application.id}/qualify`);
+      onCompleted();
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail ?? "Could not block candidate for position.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const title = isContact ? "Contact Candidate" : isScreening ? "Stage 1 Screening" : "Recruitment Stage";
 
   return (
@@ -151,7 +182,7 @@ export default function RecruitmentWorkflowModal({
             <div className="muted" style={{ margin: "10px 0" }}>
               {attempts.map((attempt) => (
                 <div key={attempt.id}>
-                  {new Date(attempt.attempted_at).toLocaleString()}: {attempt.outcome.replace(/_/g, " ")}{attempt.notes ? ` - ${attempt.notes}` : ""}
+                  {new Date(attempt.attempted_at).toLocaleString()}: {CONTACT_OUTCOME_LABELS[attempt.outcome] ?? attempt.outcome.replace(/_/g, " ")}{attempt.notes ? ` - ${attempt.notes}` : ""}
                 </div>
               ))}
             </div>
@@ -180,7 +211,13 @@ export default function RecruitmentWorkflowModal({
           <div className="field"><label>Decision</label><select value={evaluation.outcome} onChange={(event) => setEvaluation({ ...evaluation, outcome: event.target.value })}><option value="passed">Pass and advance</option><option value="on_hold">Put on hold</option><option value="failed">Not selected - return to pool</option></select></div>
           <div className="field"><label>Score (0-100)</label><input type="number" value={evaluation.score} onChange={(event) => setEvaluation({ ...evaluation, score: event.target.value })} /></div>
           <div className="field"><label>Remarks / return reason</label><textarea rows={2} value={evaluation.remarks} onChange={(event) => setEvaluation({ ...evaluation, remarks: event.target.value })} /></div>
-          <div className="btn-row"><button className="btn primary" disabled={busy} onClick={submitStage}>Save Decision</button><button className="btn" onClick={onClose}>Cancel</button></div>
+          <div className="btn-row">
+            <button className="btn primary" disabled={busy} onClick={submitStage}>Save Decision</button>
+            {application.status === "screening" && (
+              <button className="btn" disabled={busy} onClick={blockForPosition}>Block for Position</button>
+            )}
+            <button className="btn" onClick={onClose}>Cancel</button>
+          </div>
         </>
       )}
     </Modal>

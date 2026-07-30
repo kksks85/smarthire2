@@ -16,7 +16,12 @@ interface AuditRow {
 interface PiiRow {
   id: number;
   user_id: number;
+  user_name?: string | null;
+  user_email?: string | null;
+  user_role?: string | null;
   candidate_id: number;
+  candidate_name?: string | null;
+  candidate_code?: string | null;
   fields_revealed: string;
   ip_address?: string | null;
   created_at: string;
@@ -29,7 +34,7 @@ export default function Audit() {
 
   useEffect(() => {
     api.get<AuditRow[]>("/admin/audit-logs").then((r) => setAudit(r.data));
-    api.get<PiiRow[]>("/admin/pii-access-logs").then((r) => setPii(r.data));
+    api.get<PiiRow[]>("/admin/pii-view-log").then((r) => setPii(r.data));
   }, []);
 
   return (
@@ -49,8 +54,8 @@ export default function Audit() {
           <thead>
             <tr>
               <th>When</th>
-              <th>User ID</th>
-              <th>Candidate ID</th>
+              <th>User</th>
+              <th>Candidate</th>
               <th>Fields Revealed</th>
               <th>IP</th>
             </tr>
@@ -59,8 +64,14 @@ export default function Audit() {
             {pii.map((r) => (
               <tr key={r.id}>
                 <td>{new Date(r.created_at).toLocaleString()}</td>
-                <td>#{r.user_id}</td>
-                <td>#{r.candidate_id}</td>
+                <td>
+                  <div>{r.user_name ? r.user_name : `User #${r.user_id}`}</div>
+                  {r.user_email && <div className="muted" style={{ fontSize: 12 }}>{r.user_email}</div>}
+                </td>
+                <td>
+                  <div>{r.candidate_name ? r.candidate_name : `Candidate #${r.candidate_id}`}</div>
+                  {r.candidate_code && <div className="muted" style={{ fontSize: 12 }}>{r.candidate_code}</div>}
+                </td>
                 <td>{r.fields_revealed}</td>
                 <td>{r.ip_address ?? "—"}</td>
               </tr>

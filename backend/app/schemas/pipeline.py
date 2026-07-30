@@ -62,6 +62,9 @@ class ApplicationOut(BaseModel):
     current_stage_type: StageType
     contact_attempt_count: int = 0
     candidate_interest: Optional[bool] = None
+    interest_recorded_at: Optional[datetime] = None
+    blocked_for_position_at: Optional[datetime] = None
+    qualified_at: Optional[datetime] = None
     released_at: Optional[datetime] = None
     release_reason: Optional[str] = None
 

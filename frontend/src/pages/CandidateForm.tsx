@@ -7,7 +7,7 @@
  * progress indicator, and per-language read/write/speak matrix.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useReference } from "../hooks/useReference";
@@ -227,10 +227,15 @@ function calculateAge(dob: string): number | null {
 export default function CandidateForm() {
   const ref = useReference();
   const navigate = useNavigate();
+  const { id: candidateId } = useParams<{ id?: string }>();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
+  const params = new URLSearchParams(searchParams);
   const jobId = searchParams.get("jobId");
   const driveId = searchParams.get("driveId");
+  const isFieldAgent = user?.role === "field_agent";
+  const isQuickMode = isFieldAgent && params.get("quick") === "1";
+  const isEditMode = Boolean(candidateId);
 
   const [form, setForm] = useState<FormState>(() => loadDraft());
   const [step, setStep] = useState(0);
@@ -256,6 +261,41 @@ export default function CandidateForm() {
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  // Load existing candidate data when editing (e.g., after quick registration).
+  useEffect(() => {
+    if (!candidateId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/candidates/${candidateId}`);
+        if (cancelled) return;
+        setForm((f) => ({
+          ...f,
+          full_name: data.full_name ?? f.full_name,
+          phone: data.phone ?? f.phone,
+          email: data.email ?? f.email,
+          gender: data.gender ?? f.gender,
+          date_of_birth: data.date_of_birth ?? f.date_of_birth,
+          state: data.state ?? f.state,
+          city: data.city ?? f.city,
+          pincode: data.pincode ?? f.pincode,
+          address: data.address ?? f.address,
+          preferred_role: data.primary_trade ?? f.preferred_role,
+          expected_salary: data.expected_salary ?? f.expected_salary,
+          highest_qualification: data.education_level ?? f.highest_qualification,
+          aadhaar_number: (data.profile_data?.documents?.aadhaar_number as string) ??
+            data.aadhaar_last4 ??
+            f.aadhaar_number,
+        }));
+      } catch {
+        /* silent — fall back to draft / empty form */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateId]);
 
   // Fetch field-drive context (venue/title, and prefill city/state) if driveId provided
   useEffect(() => {
@@ -455,6 +495,7 @@ export default function CandidateForm() {
     if (s === "basic") {
       if (!form.full_name.trim()) return "Full Name is required.";
       if (!/^\d{10}$/.test(form.phone)) return "Enter a valid 10-digit mobile number.";
+      if (isFieldAgent && !form.email.trim()) return "Email Address is required.";
     }
     if (s === "address") {
       if (!form.state) return "State is required.";
@@ -762,6 +803,138 @@ export default function CandidateForm() {
 
   const currentSection = SECTIONS[step].key;
 
+  async function submitQuick() {
+    const phone = form.phone.replace(/\D/g, "");
+    if (!form.full_name.trim()) return setError("Full Name is required.");
+    if (!/^\d{10}$/.test(phone)) return setError("Enter a valid 10-digit mobile number.");
+    if (!form.email.trim()) return setError("Email Address is required.");
+    const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRx.test(form.email)) return setError("Enter a valid email address.");
+    const aadhaar = form.aadhaar_number.replace(/\D/g, "");
+    if (aadhaar.length !== 12) return setError("Enter a valid 12-digit Aadhaar number.");
+
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await api.post<{ id: number }>("/candidates/quick", {
+        full_name: form.full_name.trim(),
+        phone,
+        email: form.email.trim(),
+        aadhaar_last4: aadhaar.slice(-4),
+        city: form.city || null,
+        state: form.state || null,
+        primary_trade: form.preferred_role || null,
+        field_drive_id: driveId ? Number(driveId) : null,
+      });
+      localStorage.removeItem(STORAGE_KEY);
+      navigate(`/candidates/${data.id}/edit?quick=0`);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail ?? "Could not save candidate");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (isQuickMode) {
+    return (
+      <div>
+        <PageHead
+          title="Quick Register Candidate"
+          breadcrumb="Field Operations › Quick Register"
+          actions={
+            <button className="btn" type="button" onClick={() => navigate("/candidates")}>
+              Back
+            </button>
+          }
+        />
+        {driveInfo && (
+          <div className="success-note" style={{ marginBottom: 12 }}>
+            📍 Quick registration for field drive <strong>{driveInfo.title}</strong> at{" "}
+            {driveInfo.venue_name}.
+          </div>
+        )}
+        <div className="card" style={{ maxWidth: 640 }}>
+          <div className="card-head">Basic Details</div>
+          <div className="card-body">
+            <p className="muted">
+              Name, Mobile, Email, and Aadhaar are required. The full profile can be completed later.
+            </p>
+            {error && <div className="error-note" style={{ marginBottom: 12 }}>{error}</div>}
+            <div className="form-grid">
+              <div className="field">
+                <label>Full Name<span className="req">*</span></label>
+                <input
+                  value={form.full_name}
+                  onChange={(e) => set("full_name", e.target.value)}
+                  placeholder="As per Aadhaar"
+                />
+              </div>
+              <div className="field">
+                <label>Mobile Number<span className="req">*</span></label>
+                <input
+                  value={form.phone}
+                  maxLength={10}
+                  onChange={(e) => set("phone", e.target.value.replace(/\D/g, ""))}
+                  placeholder="10-digit"
+                />
+              </div>
+              <div className="field">
+                <label>Email Address<span className="req">*</span></label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div className="field">
+                <label>Aadhaar Number<span className="req">*</span></label>
+                <input
+                  value={form.aadhaar_number}
+                  maxLength={12}
+                  onChange={(e) => set("aadhaar_number", e.target.value.replace(/\D/g, ""))}
+                  placeholder="12-digit Aadhaar"
+                />
+                <span className="muted" style={{ fontSize: 11 }}>Only last 4 digits are stored.</span>
+              </div>
+              <div className="field">
+                <label>Preferred Job Role / Trade</label>
+                <input
+                  list="role-options"
+                  value={form.preferred_role}
+                  onChange={(e) => set("preferred_role", e.target.value)}
+                  placeholder="Start typing…"
+                />
+                <datalist id="role-options">
+                  {ref?.job_categories.map((c) => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+              <div className="field">
+                <label>State</label>
+                <select value={form.state} onChange={(e) => set("state", e.target.value)}>
+                  <option value="">Select…</option>
+                  {ref?.states.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>City / Town / Village</label>
+                <input value={form.city} onChange={(e) => set("city", e.target.value)} />
+              </div>
+            </div>
+            <div className="btn-row" style={{ marginTop: 18 }}>
+              <button className="btn primary" onClick={submitQuick} disabled={busy}>
+                {busy ? "Saving…" : "Save & Continue to Full Profile"}
+              </button>
+              <button className="btn" onClick={() => navigate("/candidates")} disabled={busy}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHead
@@ -903,7 +1076,7 @@ export default function CandidateForm() {
               />
             </div>
             <div className="field">
-              <label>Email Address</label>
+              <label>Email Address{isFieldAgent && <span className="req">*</span>}</label>
               <input
                 type="email"
                 value={form.email}
