@@ -23,7 +23,7 @@ const ALL: Role[] = [
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Overview",
-    modules: [{ label: "Dashboard", path: "/", roles: ALL }],
+    modules: [{ label: "Dashboard", path: "/", roles: ["admin", "manager", "recruiter", "employer", "field_agent"] }],
   },
   {
     title: "Candidate Data Bank",
@@ -62,7 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Partners",
     modules: [
-      { label: "Institutions", path: "/institutions", roles: ["admin", "manager", "institution"] },
+      { label: "Institutions", path: "/institutions", roles: ["admin", "manager"] },
       { label: "Employers (Clients)", path: "/employers", roles: ["admin", "manager", "employer"] },
     ],
   },
@@ -84,7 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Email Accounts", path: "/admin/email/accounts", roles: ["admin"] },
       { label: "Email Templates", path: "/admin/email/templates", roles: ["admin", "manager"] },
       { label: "Email Rules", path: "/admin/email/rules", roles: ["admin", "manager"] },
-      { label: "Public Sharing", path: "/admin/public-sharing", roles: ALL },
+      { label: "Public Sharing", path: "/admin/public-sharing", roles: ["admin", "manager", "recruiter", "employer", "field_agent"] },
       { label: "Reports", path: "/reports", roles: ["admin", "manager", "recruiter"] },
       { label: "Audit / PII Access", path: "/admin/audit", roles: ["admin"] },
     ],

@@ -187,7 +187,10 @@ def list_my_candidates(
     current_user: User = Depends(_UPLOADERS),
 ):
     inst = _get_current_institution(db, current_user)
-    stmt = select(Candidate).where(Candidate.institution_id == inst.id)
+    stmt = select(Candidate).where(
+        Candidate.institution_id == inst.id,
+        Candidate.source == CandidateSource.INSTITUTION_UPLOAD,
+    )
     if q:
         stmt = stmt.where(Candidate.full_name.ilike(f"%{q}%"))
     if status:

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.core.enums import (
     ApplicationStatus,
+    CandidateSource,
     CandidateStatus,
     JobStatus,
     KycStatus,
@@ -213,10 +214,14 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         ]
     elif role == RoleName.INSTITUTION.value:
         inst_id = current_user.institution_id
+        inst_upload_filter = and_(
+            Candidate.institution_id == inst_id,
+            Candidate.source == CandidateSource.INSTITUTION_UPLOAD,
+        )
         cards = [
             KpiCard(
                 label="Total Candidates Uploaded",
-                value=_count(db, Candidate, Candidate.institution_id == inst_id),
+                value=_count(db, Candidate, inst_upload_filter),
                 hint="Students shared with Layam Group",
                 link="/institution/candidates",
             ),
@@ -225,7 +230,7 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
                 value=_count(
                     db,
                     Candidate,
-                    Candidate.institution_id == inst_id,
+                    inst_upload_filter,
                     Candidate.status == CandidateStatus.PLACED,
                 ),
                 hint="Successfully placed candidates",
@@ -236,7 +241,7 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
                 value=_count(
                     db,
                     Candidate,
-                    Candidate.institution_id == inst_id,
+                    inst_upload_filter,
                     Candidate.status.in_([CandidateStatus.IN_PROCESS, CandidateStatus.SHORTLISTED]),
                 ),
                 hint="Active in recruitment pipeline",
@@ -245,7 +250,7 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             KpiCard(
                 label="Awaiting Screening",
                 value=_count(
-                    db, Candidate, Candidate.institution_id == inst_id, Candidate.status == CandidateStatus.NEW
+                    db, Candidate, inst_upload_filter, Candidate.status == CandidateStatus.NEW
                 ),
                 hint="Yet to be contacted by recruiters",
                 link="/institution/candidates?status=new",
