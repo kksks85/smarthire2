@@ -5,20 +5,21 @@ import { PageHead } from "../../components/ui";
 import type { InstitutionUploadSummary } from "../../types";
 
 const TEMPLATE_COLUMNS = [
-  "Institution Name",
-  "Trade",
-  "Name",
-  "Phone",
-  "Email",
+  "Student Name",
+  "Mobile Number",
   "Gender",
-  "City",
+  "Date of Birth / Age",
+  "Qualification",
+  "Course / Trade / Specialization",
+  "Passing Year / Expected Passing Year",
+  "Current Status (Current Student / Alumni)",
+  "Preferred Job Role",
+  "District",
   "State",
-  "Pincode",
-  "Experience",
-  "Education",
-  "Certification",
-  "Languages",
-  "Expected Salary",
+  "Willing to Relocate (Yes/No)",
+  "Fresher / Experienced",
+  "Experience (Months/Years)",
+  "Remarks / Special Skills",
 ];
 
 export default function InstitutionUpload() {
@@ -31,20 +32,21 @@ export default function InstitutionUpload() {
   function downloadCsvTemplate() {
     const header = TEMPLATE_COLUMNS.join(",");
     const example = [
-      "ABC Institute of Technology",
-      "Electrician",
       "Ravi Kumar",
       "9876543210",
-      "ravi@example.com",
       "Male",
+      "21",
+      "ITI",
+      "Electrician",
+      "2024",
+      "Current Student",
+      "Electrician",
       "Pune",
       "Maharashtra",
-      "411001",
-      "2",
-      "ITI",
-      "ITI Electrician",
-      "Hindi, Marathi",
-      "18000",
+      "Yes",
+      "Fresher",
+      "0",
+      "Good communication, punctual",
     ].join(",");
     const blob = new Blob([header + "\n" + example + "\n"], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -87,7 +89,7 @@ export default function InstitutionUpload() {
         <div className="card-body">
           <div className="inline-note">
             Upload an Excel (.xlsx) or CSV file using the institution template.
-            <strong> Trade, Name and Phone </strong> are mandatory for every row.
+            <strong> Student Name, Mobile Number and Course / Trade / Specialization </strong> are mandatory for every row.
           </div>
           <div className="btn-row" style={{ margin: "14px 0" }}>
             <button className="btn" onClick={downloadCsvTemplate}>Download CSV Template</button>
