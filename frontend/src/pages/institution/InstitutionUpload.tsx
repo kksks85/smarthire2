@@ -68,8 +68,10 @@ export default function InstitutionUpload() {
     setSummary(null);
     try {
       const formData = new FormData();
-      formData.append("file", file);
-      const { data } = await api.post<InstitutionUploadSummary>("/institutions/me/upload-candidates", formData);
+      formData.append("file", file, file.name);
+      const { data } = await api.post<InstitutionUploadSummary>("/institutions/me/upload-candidates", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       setSummary(data);
     } catch (err: any) {
       setError(err.response?.data?.detail ?? "Upload failed. Please check the file and try again.");
