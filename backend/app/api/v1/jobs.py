@@ -23,6 +23,7 @@ from app.schemas.job import (
     JobUpdate,
     PublishOut,
 )
+from app.schemas.pipeline import AssignRecruiter
 from app.services.audit import record_audit
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -161,6 +162,29 @@ def decide_approval(
     return job
 
 
+@router.post("/{job_id}/assign-recruiter", response_model=JobOut)
+def assign_job_recruiter(
+    job_id: int,
+    body: AssignRecruiter,
+    db: Session = Depends(get_db),
+    _: User = Depends(_APPROVERS),
+):
+    job = db.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in (JobStatus.APPROVED, JobStatus.PUBLISHED):
+        raise HTTPException(status_code=400, detail="Approve the job before assigning a recruiter")
+    recruiter = db.get(User, body.assigned_recruiter_id)
+    if not recruiter or recruiter.role.name != RoleName.RECRUITER:
+        raise HTTPException(status_code=400, detail="Select an active recruiter")
+    if not recruiter.is_active:
+        raise HTTPException(status_code=400, detail="Selected recruiter is inactive")
+    job.assigned_recruiter_id = recruiter.id
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 @router.get("/{job_id}/approvals", response_model=list[ApprovalOut])
 def list_approvals(job_id: int, db: Session = Depends(get_db), _: User = Depends(_VIEWERS)):
     return db.scalars(
@@ -189,7 +213,7 @@ def publish_job(
 
     base = get_public_base_url(db)
     public_url = f"{base}/careers/{job.public_slug}"
-    apply_url = f"{base}/apply/{job.public_slug}"
+    apply_url = f"{base}/apply/{job.public_slug}?source=website"
     return PublishOut(
         id=job.id,
         status=job.status,
@@ -197,8 +221,8 @@ def publish_job(
         public_url=public_url,
         apply_url=apply_url,
         qr_data_uri=generate_qr_data_uri(apply_url),
-        share_facebook_url=f"https://www.facebook.com/sharer/sharer.php?u={quote(public_url)}",
-        share_linkedin_url=f"https://www.linkedin.com/sharing/share-offsite/?url={quote(public_url)}",
+        share_facebook_url=f"https://www.facebook.com/sharer/sharer.php?u={quote(f'{base}/apply/{job.public_slug}?source=facebook')}",
+        share_linkedin_url=f"https://www.linkedin.com/sharing/share-offsite/?url={quote(f'{base}/apply/{job.public_slug}?source=linkedin')}",
     )
 
 
@@ -224,7 +248,7 @@ def post_job_to_linkedin(
     
     # Get the public URL
     base = get_public_base_url(db)
-    apply_url = f"{base}/apply/{job.public_slug}"
+    apply_url = f"{base}/apply/{job.public_slug}?source=linkedin"
     location = ", ".join(
         part for part in (job.work_address, job.work_city, job.work_state) if part
     ) or "Not specified"

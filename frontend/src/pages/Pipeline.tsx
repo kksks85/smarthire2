@@ -1,37 +1,48 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { Badge, Modal, PageHead } from "../components/ui";
+import { Badge, PageHead } from "../components/ui";
+import RecruitmentWorkflowModal from "../components/RecruitmentWorkflowModal";
 import type { Application, Candidate, Job, User } from "../types";
 
 const STAGES = [
+  { key: "contact", label: "Contact" },
   { key: "screening", label: "Screening" },
-  { key: "client_interview", label: "Client Interview" },
-  { key: "document_verification", label: "Document Verification" },
+  { key: "client_interview", label: "Employer Interview" },
+  { key: "document_verification", label: "Documents" },
+  { key: "kyc", label: "KYC" },
+  { key: "validated", label: "Validated" },
   { key: "placement", label: "Placement" },
 ];
 
 const APP_STATUSES = [
   "assigned",
+  "contact_pending",
+  "screening",
   "in_process",
   "in_interview",
+  "documents",
+  "kyc",
+  "validated",
   "shortlisted",
   "selected",
+  "on_hold",
   "rejected",
   "placed",
   "closed",
+  "released",
 ];
 
 export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [apps, setApps] = useState<Application[]>([]);
   const [candidates, setCandidates] = useState<Record<number, Candidate>>({});
   const [jobs, setJobs] = useState<Record<number, Job>>({});
   const [recruiters, setRecruiters] = useState<User[]>([]);
   const [active, setActive] = useState<Application | null>(null);
-  const [evalForm, setEvalForm] = useState({ outcome: "passed", score: "", remarks: "" });
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "");
 
   const canAssign = user?.role === "manager" || user?.role === "admin";
@@ -48,6 +59,10 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
     });
     const cMap: Record<number, Candidate> = {};
     cRes.data.items.forEach((c) => (cMap[c.id] = c));
+    await Promise.all(data.filter((application) => !cMap[application.candidate_id]).map(async (application) => {
+      const response = await api.get<Candidate>(`/candidates/${application.candidate_id}`);
+      cMap[response.data.id] = response.data;
+    }));
     setCandidates(cMap);
 
     const jRes = await api.get<Job[]>("/jobs");
@@ -70,19 +85,6 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
     await api.post(`/applications/${appId}/assign`, {
       assigned_recruiter_id: recruiterId,
     });
-    load();
-  }
-
-  async function recordEval() {
-    if (!active) return;
-    await api.post(`/applications/${active.id}/evaluations`, {
-      stage_type: active.current_stage_type,
-      outcome: evalForm.outcome,
-      score: evalForm.score ? Number(evalForm.score) : null,
-      remarks: evalForm.remarks,
-    });
-    setActive(null);
-    setEvalForm({ outcome: "passed", score: "", remarks: "" });
     load();
   }
 
@@ -109,29 +111,32 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
           {apps.length} application{apps.length === 1 ? "" : "s"}
         </span>
       </div>
-      <table className="sn-table">
+      <div className="pipeline-table-wrap">
+      <table className="sn-table pipeline-table">
         <thead>
           <tr>
             <th>Candidate</th>
-            <th>Job</th>
-            <th>Current Stage</th>
-            <th>Status</th>
-            <th>Recruiter</th>
-            <th></th>
+            <th>Requisition</th>
+            <th>Stage</th>
+            <th>Progress</th>
+            <th>Owner</th>
+            <th>Next action</th>
           </tr>
         </thead>
         <tbody>
           {apps.map((a) => (
             <tr key={a.id}>
-              <td>{candidates[a.candidate_id]?.full_name ?? `#${a.candidate_id}`}</td>
-              <td>{jobs[a.job_id]?.title ?? `#${a.job_id}`}</td>
               <td>
-                {STAGES.find((s) => s.key === a.current_stage_type)?.label ??
-                  a.current_stage_type}
+                <button className="btn link candidate-link" onClick={() => navigate(`/candidates/${a.candidate_id}`)}>{candidates[a.candidate_id]?.full_name ?? `Candidate #${a.candidate_id}`}</button>
+                <span className="pipeline-id">#{a.candidate_id}</span>
               </td>
               <td>
-                <Badge value={a.status} />
+                <span className="pipeline-job" title={jobs[a.job_id]?.title}>{jobs[a.job_id]?.title ?? `Job #${a.job_id}`}</span>
               </td>
+              <td>
+                <div className="pipeline-stage"><strong title={stageLabel(a)}>{stageLabel(a)}</strong><Badge value={a.status} /></div>
+              </td>
+              <td><Workflow application={a} /></td>
               <td>
                 {canAssign ? (
                   <select
@@ -146,13 +151,11 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
                     ))}
                   </select>
                 ) : (
-                  a.assigned_recruiter_id ?? "—"
+                  recruiterName(a, recruiters, user)
                 )}
               </td>
-              <td>
-                <button className="btn link" onClick={() => setActive(a)}>
-                  Record Stage
-                </button>
+              <td className="pipeline-actions">
+                {nextAction(a, () => setActive(a), () => navigate(`/kyc?candidate_id=${a.candidate_id}&application_id=${a.id}`))}
               </td>
             </tr>
           ))}
@@ -165,51 +168,59 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
           )}
         </tbody>
       </table>
+      </div>
 
       {active && (
-        <Modal
-          title={`Record — ${
-            STAGES.find((s) => s.key === active.current_stage_type)?.label
-          }`}
+        <RecruitmentWorkflowModal
+          application={active}
+          candidateName={candidates[active.candidate_id]?.full_name ?? `Candidate #${active.candidate_id}`}
           onClose={() => setActive(null)}
-        >
-          <div className="field">
-            <label>Outcome</label>
-            <select
-              value={evalForm.outcome}
-              onChange={(e) => setEvalForm({ ...evalForm, outcome: e.target.value })}
-            >
-              <option value="passed">Passed → advance</option>
-              <option value="failed">Failed → reject</option>
-              <option value="on_hold">On hold</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Score (0–100)</label>
-            <input
-              type="number"
-              value={evalForm.score}
-              onChange={(e) => setEvalForm({ ...evalForm, score: e.target.value })}
-            />
-          </div>
-          <div className="field">
-            <label>Remarks</label>
-            <textarea
-              rows={2}
-              value={evalForm.remarks}
-              onChange={(e) => setEvalForm({ ...evalForm, remarks: e.target.value })}
-            />
-          </div>
-          <div className="btn-row" style={{ marginTop: 12 }}>
-            <button className="btn primary" onClick={recordEval}>
-              Save Evaluation
-            </button>
-            <button className="btn" onClick={() => setActive(null)}>
-              Cancel
-            </button>
-          </div>
-        </Modal>
+          onCompleted={() => { setActive(null); load(); }}
+        />
       )}
     </div>
   );
+}
+
+function stageLabel(application: Application) {
+  if (application.status === "assigned" || application.status === "contact_pending") return "Contact";
+  if (application.status === "documents") return "Documents";
+  if (application.status === "validated") return "Validated / Placement";
+  if (application.status === "on_hold") return "On hold";
+  if (application.status === "released") return "Returned to pool";
+  return STAGES.find((stage) => stage.key === application.current_stage_type)?.label ?? application.current_stage_type;
+}
+
+function isTerminal(status: string) {
+  return ["released", "placed", "rejected", "withdrawn", "closed"].includes(status);
+}
+
+function Workflow({ application }: { application: Application }) {
+  const steps = ["contact", "screening", "client_interview", "document_verification", "kyc", "placement"];
+  const stage = application.status === "assigned" || application.status === "contact_pending" ? "contact" : application.current_stage_type;
+  const step = Math.max(0, steps.indexOf(stage));
+  const released = application.status === "released";
+  return (
+    <div className="pipeline-workflow" title={released ? application.release_reason || "Returned to the pool" : `${stageLabel(application)}: step ${step + 1} of ${steps.length}`}>
+      <div className="workflow-track" aria-label={released ? "Returned to pool" : `Step ${step + 1} of ${steps.length}`}>
+        {steps.map((item, index) => <span key={item} className={released ? "released" : index < step ? "complete" : index === step ? "current" : ""} />)}
+      </div>
+      <span>{released ? "Released" : `${step + 1} of ${steps.length}`}</span>
+    </div>
+  );
+}
+
+function nextAction(application: Application, openWorkflow: () => void, manageDocuments: () => void) {
+  if (isTerminal(application.status)) return <span className="muted">No action required</span>;
+  if (application.status === "documents" || application.status === "kyc") {
+    return <><button className="btn primary" onClick={manageDocuments}>Files</button><button className="btn link" onClick={openWorkflow}>Decision</button></>;
+  }
+  const label = application.status === "contact_pending" || application.status === "assigned" ? "Record contact" : "Open workflow";
+  return <button className="btn primary" onClick={openWorkflow}>{label}</button>;
+}
+
+function recruiterName(application: Application, recruiters: User[], currentUser: User | null) {
+  if (!application.assigned_recruiter_id) return "Unassigned";
+  if (application.assigned_recruiter_id === currentUser?.id) return currentUser.full_name;
+  return recruiters.find((recruiter) => recruiter.id === application.assigned_recruiter_id)?.full_name ?? `Recruiter #${application.assigned_recruiter_id}`;
 }

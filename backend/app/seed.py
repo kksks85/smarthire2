@@ -43,7 +43,8 @@ DEFAULT_STAGES = [
     ("Screening", StageType.SCREENING, 1),
     ("Client Interview", StageType.CLIENT_INTERVIEW, 2),
     ("Document Submission & Verification", StageType.DOCUMENT_VERIFICATION, 3),
-    ("Placement on Client Premises", StageType.PLACEMENT, 4),
+    ("KYC Validation", StageType.KYC, 4),
+    ("Placement on Client Premises", StageType.PLACEMENT, 5),
 ]
 
 DEFAULT_SCREENING_QUESTIONS = [

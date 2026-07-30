@@ -1,5 +1,6 @@
 from app.models.audit import AgentLocationLog, AuditLog, PiiAccessLog
 from app.models.candidate import Candidate
+from app.models.candidate import Candidate, CandidateCustomQuestionResponse
 from app.models.email import (
     EmailAccount,
     EmailAttachment,
@@ -15,7 +16,9 @@ from app.models.org import Employer, Institution
 from app.models.pipeline import (
     Application,
     InterviewStageConfig,
+    RecruiterContactAttempt,
     ScreeningQuestion,
+    ScreeningResponse,
     StageEvaluation,
 )
 from app.models.public_site import PublicSiteSettings
@@ -27,6 +30,7 @@ __all__ = [
     "AuditLog",
     "PiiAccessLog",
     "Candidate",
+    "CandidateCustomQuestionResponse",
     "EmailAccount",
     "EmailAttachment",
     "EmailMessage",
@@ -41,7 +45,9 @@ __all__ = [
     "Institution",
     "Application",
     "InterviewStageConfig",
+    "RecruiterContactAttempt",
     "ScreeningQuestion",
+    "ScreeningResponse",
     "StageEvaluation",
     "PublicSiteSettings",
     "Report",

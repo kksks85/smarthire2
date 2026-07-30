@@ -52,10 +52,47 @@ class Application(Base, TimestampMixin):
     current_stage_type: Mapped[StageType] = mapped_column(
         String(32), default=StageType.SCREENING, nullable=False
     )
+    contact_attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    candidate_interest: Mapped[Optional[bool]] = mapped_column(Boolean)
+    interest_recorded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    released_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    release_reason: Mapped[Optional[str]] = mapped_column(Text)
 
     evaluations: Mapped[list["StageEvaluation"]] = relationship(
         back_populates="application", cascade="all, delete-orphan"
     )
+    contact_attempts: Mapped[list["RecruiterContactAttempt"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan"
+    )
+    screening_responses: Mapped[list["ScreeningResponse"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan"
+    )
+
+
+class RecruiterContactAttempt(Base, TimestampMixin):
+    __tablename__ = "recruiter_contact_attempts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
+    recruiter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    application: Mapped["Application"] = relationship(back_populates="contact_attempts")
+
+
+class ScreeningResponse(Base, TimestampMixin):
+    __tablename__ = "screening_responses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), nullable=False, index=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("screening_questions.id"), nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    answered_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    application: Mapped["Application"] = relationship(back_populates="screening_responses")
 
 
 class StageEvaluation(Base, TimestampMixin):

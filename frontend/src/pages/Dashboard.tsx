@@ -21,6 +21,13 @@ export default function DashboardPage() {
       <PageHead
         title={`Welcome, ${user?.full_name.split(" ")[0]}`}
         breadcrumb="Overview"
+        actions={
+          user?.role === "admin" || user?.role === "manager" ? (
+            <button className="btn primary" onClick={() => navigate("/screen-resources")}>
+              Screen Resources
+            </button>
+          ) : undefined
+        }
       />
       <div className="dashboard-top-row">
         <div className="kpi-grid">

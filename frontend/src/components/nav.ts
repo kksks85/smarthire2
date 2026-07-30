@@ -46,6 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     modules: [
       { label: "My Assignments", path: "/assignments", roles: ["recruiter", "manager", "admin"] },
       { label: "Interview Pipeline", path: "/pipeline", roles: ["admin", "manager", "recruiter"] },
+      { label: "Screen Resources", path: "/screen-resources", roles: ["admin", "manager"] },
       { label: "KYC Verification", path: "/kyc", roles: ["admin", "manager", "recruiter"] },
     ],
   },

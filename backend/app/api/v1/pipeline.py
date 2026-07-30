@@ -7,17 +7,23 @@ from sqlalchemy.orm import Session
 from app.core.deps import require_roles
 from app.core.enums import (
     ApplicationStatus,
+    CandidatePoolStatus,
     CandidateStatus,
+    JobStatus,
     RoleName,
     StageOutcome,
     StageType,
 )
 from app.db.session import get_db
 from app.models.candidate import Candidate
+from app.models.job import JobPosting
+from app.models.kyc import KycDocument
 from app.models.pipeline import (
     Application,
     InterviewStageConfig,
+    RecruiterContactAttempt,
     ScreeningQuestion,
+    ScreeningResponse,
     StageEvaluation,
 )
 from app.models.user import User
@@ -25,10 +31,16 @@ from app.schemas.pipeline import (
     ApplicationCreate,
     ApplicationOut,
     AssignRecruiter,
+    CandidateInterestRequest,
+    ContactAttemptCreate,
+    ContactAttemptOut,
     EvaluationCreate,
     EvaluationOut,
     ScreeningQuestionCreate,
     ScreeningQuestionOut,
+    ScreeningMatch,
+    ScreeningResponseOut,
+    ScreeningResponsesSave,
     StageConfigOut,
 )
 from app.services.audit import record_audit
@@ -43,8 +55,124 @@ _STAGE_ORDER = [
     StageType.SCREENING,
     StageType.CLIENT_INTERVIEW,
     StageType.DOCUMENT_VERIFICATION,
+    StageType.KYC,
     StageType.PLACEMENT,
 ]
+
+_CONTACT_OUTCOMES = {
+    "connected",
+    "no_answer",
+    "wrong_number",
+    "phone_switched_off",
+    "call_back_later",
+    "candidate_not_interested",
+    "other",
+}
+_ACTIVE_STATUSES = {
+    ApplicationStatus.ASSIGNED,
+    ApplicationStatus.CONTACT_PENDING,
+    ApplicationStatus.SCREENING,
+    ApplicationStatus.IN_INTERVIEW,
+    ApplicationStatus.DOCUMENTS,
+    ApplicationStatus.KYC,
+    ApplicationStatus.VALIDATED,
+    ApplicationStatus.SELECTED,
+}
+
+
+def _ensure_application_access(app_row: Application, current_user: User) -> None:
+    if current_user.role.name == RoleName.RECRUITER and app_row.assigned_recruiter_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Application is assigned to another recruiter")
+
+
+def _release_to_pool(db: Session, app_row: Application, reason: str) -> None:
+    candidate = db.get(Candidate, app_row.candidate_id)
+    if candidate:
+        candidate.pool_status = CandidatePoolStatus.AVAILABLE
+        candidate.status = CandidateStatus.NEW
+    app_row.status = ApplicationStatus.RELEASED
+    app_row.released_at = datetime.now(timezone.utc)
+    app_row.release_reason = reason
+
+
+def _required_documents(job: JobPosting) -> list[str]:
+    required = job.documents_required or {}
+    if isinstance(required, list):
+        return [str(item) for item in required]
+    if isinstance(required, dict):
+        for key in ("items", "documents", "required"):
+            if isinstance(required.get(key), list):
+                return [str(item) for item in required[key]]
+    return []
+
+
+def _values(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).lower() for item in value]
+    if isinstance(value, dict):
+        for key in ("items", "skills", "values", "required"):
+            if isinstance(value.get(key), list):
+                return [str(item).lower() for item in value[key]]
+    return []
+
+
+@router.get("/screening/jobs/{job_id}", response_model=list[ScreeningMatch])
+def screen_candidates_for_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_MGR_ADMIN),
+):
+    job = db.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in (JobStatus.APPROVED, JobStatus.PUBLISHED):
+        raise HTTPException(status_code=400, detail="Select an approved job for screening")
+
+    required_skills = _values(job.required_skills)
+    matches: list[ScreeningMatch] = []
+    for candidate in db.scalars(select(Candidate).where(
+        Candidate.pool_status == CandidatePoolStatus.AVAILABLE,
+        Candidate.status.notin_([
+            CandidateStatus.PLACED, CandidateStatus.REJECTED, CandidateStatus.BLACKLISTED,
+        ]),
+    )).all():
+        score = 0
+        reasons: list[str] = []
+        trade = (candidate.primary_trade or "").lower()
+        job_terms = f"{job.title} {job.category}".lower()
+        if trade and (trade in job_terms or any(word in trade for word in job_terms.split())):
+            score += 35
+            reasons.append("matching trade")
+        if job.work_state and candidate.state and candidate.state.lower() == job.work_state.lower():
+            score += 15
+            reasons.append("same state")
+        if job.work_city and candidate.city and candidate.city.lower() == job.work_city.lower():
+            score += 15
+            reasons.append("same city")
+        if (candidate.experience_years or 0) >= job.min_experience_years:
+            score += 15
+            reasons.append("experience requirement met")
+        if job.min_qualification and candidate.education_level:
+            score += 5
+            reasons.append("education available")
+        candidate_skills = _values((candidate.profile_data or {}).get("skills"))
+        skill_matches = [skill for skill in required_skills if skill in candidate_skills]
+        if skill_matches:
+            score += min(15, len(skill_matches) * 5)
+            reasons.append(f"skills: {', '.join(skill_matches)}")
+        if score:
+            matches.append(ScreeningMatch(
+                candidate_id=candidate.id,
+                full_name=candidate.full_name,
+                primary_trade=candidate.primary_trade,
+                city=candidate.city,
+                state=candidate.state,
+                experience_years=candidate.experience_years,
+                education_level=candidate.education_level,
+                score=score,
+                reasons=reasons,
+            ))
+    return sorted(matches, key=lambda match: (-match.score, match.full_name))
 
 
 # ---- Screening questions (admin config) ----
@@ -85,23 +213,27 @@ def create_application(
     exists = db.scalar(
         select(Application).where(
             Application.candidate_id == body.candidate_id,
-            Application.job_id == body.job_id,
+            Application.status.in_(_ACTIVE_STATUSES),
         )
     )
     if exists:
-        raise HTTPException(status_code=409, detail="Candidate already assigned to this job")
+        raise HTTPException(status_code=409, detail="Candidate is already in an active recruitment process")
+
+    candidate = db.get(Candidate, body.candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    if candidate.pool_status != CandidatePoolStatus.AVAILABLE:
+        raise HTTPException(status_code=409, detail="Candidate is not available in the resource pool")
 
     app_row = Application(
         candidate_id=body.candidate_id,
         job_id=body.job_id,
         assigned_recruiter_id=body.assigned_recruiter_id,
         assigned_by_id=current_user.id,
+        status=ApplicationStatus.CONTACT_PENDING,
     )
     db.add(app_row)
-
-    candidate = db.get(Candidate, body.candidate_id)
-    if candidate:
-        candidate.status = CandidateStatus.IN_PROCESS
+    candidate.pool_status = CandidatePoolStatus.RESERVED
 
     record_audit(
         db, user_id=current_user.id, action="application.create",
@@ -112,6 +244,175 @@ def create_application(
     return app_row
 
 
+@router.get("/applications/{application_id}/contact-attempts", response_model=list[ContactAttemptOut])
+def list_contact_attempts(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    return db.scalars(
+        select(RecruiterContactAttempt)
+        .where(RecruiterContactAttempt.application_id == application_id)
+        .order_by(RecruiterContactAttempt.attempted_at)
+    ).all()
+
+
+@router.post("/applications/{application_id}/contact-attempts", response_model=ApplicationOut)
+def record_contact_attempt(
+    application_id: int,
+    body: ContactAttemptCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    if current_user.role.name != RoleName.RECRUITER:
+        raise HTTPException(status_code=403, detail="Only the assigned recruiter can record contact attempts")
+    if app_row.status not in (ApplicationStatus.ASSIGNED, ApplicationStatus.CONTACT_PENDING):
+        raise HTTPException(status_code=400, detail="Contact attempts are no longer available for this application")
+    if body.outcome not in _CONTACT_OUTCOMES:
+        raise HTTPException(status_code=400, detail="Unsupported contact outcome")
+    if body.outcome == "other" and not (body.notes or "").strip():
+        raise HTTPException(status_code=400, detail="Notes are required for the Other outcome")
+    if db.scalar(select(RecruiterContactAttempt.id).where(
+        RecruiterContactAttempt.application_id == app_row.id,
+        RecruiterContactAttempt.outcome == "connected",
+    )):
+        raise HTTPException(status_code=400, detail="Record the candidate interest decision after a successful contact")
+
+    db.add(RecruiterContactAttempt(
+        application_id=app_row.id,
+        recruiter_id=current_user.id,
+        outcome=body.outcome,
+        notes=body.notes,
+        attempted_at=datetime.now(timezone.utc),
+    ))
+    app_row.contact_attempt_count += 1
+    if body.outcome == "candidate_not_interested":
+        app_row.candidate_interest = False
+        _release_to_pool(db, app_row, body.notes or "Candidate not interested")
+    elif body.outcome != "connected" and app_row.contact_attempt_count >= 3:
+        _release_to_pool(db, app_row, "Three unsuccessful contact attempts")
+    record_audit(
+        db, user_id=current_user.id, action="application.contact_attempt",
+        entity_type="application", entity_id=app_row.id, detail=body.outcome, commit=False,
+    )
+    db.commit()
+    db.refresh(app_row)
+    return app_row
+
+
+@router.post("/applications/{application_id}/interest", response_model=ApplicationOut)
+def record_candidate_interest(
+    application_id: int,
+    body: CandidateInterestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    if current_user.role.name != RoleName.RECRUITER:
+        raise HTTPException(status_code=403, detail="Only the assigned recruiter can record candidate interest")
+    if app_row.status not in (ApplicationStatus.ASSIGNED, ApplicationStatus.CONTACT_PENDING):
+        raise HTTPException(status_code=400, detail="Candidate interest is already recorded for this application")
+    connected = db.scalar(
+        select(RecruiterContactAttempt.id).where(
+            RecruiterContactAttempt.application_id == app_row.id,
+            RecruiterContactAttempt.outcome == "connected",
+        )
+    )
+    if not connected:
+        raise HTTPException(status_code=400, detail="Record a successful contact before recording interest")
+    app_row.candidate_interest = body.interested
+    app_row.interest_recorded_at = datetime.now(timezone.utc)
+    if body.interested:
+        app_row.status = ApplicationStatus.SCREENING
+        candidate = db.get(Candidate, app_row.candidate_id)
+        if candidate:
+            candidate.pool_status = CandidatePoolStatus.IN_PROCESS
+            candidate.status = CandidateStatus.IN_PROCESS
+    else:
+        _release_to_pool(db, app_row, body.notes or "Candidate not interested")
+    record_audit(
+        db, user_id=current_user.id, action="application.interest",
+        entity_type="application", entity_id=app_row.id,
+        detail="interested" if body.interested else "not_interested", commit=False,
+    )
+    db.commit()
+    db.refresh(app_row)
+    return app_row
+
+
+@router.get("/applications/{application_id}/screening-responses", response_model=list[ScreeningResponseOut])
+def list_screening_responses(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    return db.scalars(
+        select(ScreeningResponse)
+        .where(ScreeningResponse.application_id == application_id)
+        .order_by(ScreeningResponse.question_id)
+    ).all()
+
+
+@router.put("/applications/{application_id}/screening-responses", response_model=list[ScreeningResponseOut])
+def save_screening_responses(
+    application_id: int,
+    body: ScreeningResponsesSave,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_STAFF),
+):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    if app_row.status != ApplicationStatus.SCREENING:
+        raise HTTPException(status_code=400, detail="Candidate is not ready for screening")
+    active_question_ids = set(db.scalars(
+        select(ScreeningQuestion.id).where(ScreeningQuestion.is_active.is_(True))
+    ).all())
+    submitted = {response.question_id: response.answer.strip() for response in body.responses}
+    if set(submitted) != active_question_ids or any(not answer for answer in submitted.values()):
+        raise HTTPException(status_code=400, detail="Answer every active screening question")
+    existing = {
+        response.question_id: response
+        for response in db.scalars(
+            select(ScreeningResponse).where(ScreeningResponse.application_id == app_row.id)
+        ).all()
+    }
+    now = datetime.now(timezone.utc)
+    for question_id, answer in submitted.items():
+        if question_id in existing:
+            existing[question_id].answer = answer
+            existing[question_id].answered_by_id = current_user.id
+            existing[question_id].answered_at = now
+        else:
+            db.add(ScreeningResponse(
+                application_id=app_row.id,
+                question_id=question_id,
+                answer=answer,
+                answered_by_id=current_user.id,
+                answered_at=now,
+            ))
+    db.commit()
+    return db.scalars(
+        select(ScreeningResponse).where(ScreeningResponse.application_id == app_row.id)
+    ).all()
+
+
 @router.get("/applications", response_model=list[ApplicationOut])
 def list_applications(
     job_id: int | None = None,
@@ -119,7 +420,7 @@ def list_applications(
     recruiter_id: int | None = None,
     status: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(_STAFF),
+    current_user: User = Depends(_STAFF),
 ):
     stmt = select(Application).order_by(Application.created_at.desc())
     if job_id:
@@ -128,6 +429,8 @@ def list_applications(
         stmt = stmt.where(Application.candidate_id == candidate_id)
     if recruiter_id:
         stmt = stmt.where(Application.assigned_recruiter_id == recruiter_id)
+    if current_user.role.name == RoleName.RECRUITER:
+        stmt = stmt.where(Application.assigned_recruiter_id == current_user.id)
     if status:
         stmt = stmt.where(Application.status == status)
     return db.scalars(stmt).all()
@@ -152,8 +455,12 @@ def assign_recruiter(
 
 @router.get("/applications/{application_id}/evaluations", response_model=list[EvaluationOut])
 def list_evaluations(
-    application_id: int, db: Session = Depends(get_db), _: User = Depends(_STAFF)
+    application_id: int, db: Session = Depends(get_db), current_user: User = Depends(_STAFF)
 ):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
     return db.scalars(
         select(StageEvaluation)
         .where(StageEvaluation.application_id == application_id)
@@ -171,6 +478,43 @@ def record_evaluation(
     app_row = db.get(Application, application_id)
     if not app_row:
         raise HTTPException(status_code=404, detail="Application not found")
+    _ensure_application_access(app_row, current_user)
+    if app_row.status in (ApplicationStatus.RELEASED, ApplicationStatus.PLACED):
+        raise HTTPException(status_code=400, detail="This application is already closed")
+    if body.stage_type != app_row.current_stage_type:
+        raise HTTPException(status_code=400, detail="Record the evaluation for the current stage")
+    if body.outcome == StageOutcome.PASSED and body.stage_type == StageType.SCREENING:
+        active_question_count = db.scalar(
+            select(InterviewStageConfig.id).where(InterviewStageConfig.stage_type == StageType.SCREENING)
+        )
+        response_count = len(db.scalars(
+            select(ScreeningResponse.id).where(ScreeningResponse.application_id == app_row.id)
+        ).all())
+        question_count = len(db.scalars(
+            select(ScreeningQuestion.id).where(ScreeningQuestion.is_active.is_(True))
+        ).all())
+        if active_question_count and response_count != question_count:
+            raise HTTPException(status_code=400, detail="Answer every screening question before passing the stage")
+
+    if body.outcome == StageOutcome.PASSED and body.stage_type in (
+        StageType.DOCUMENT_VERIFICATION,
+        StageType.KYC,
+    ):
+        job = db.get(JobPosting, app_row.job_id)
+        required_documents = _required_documents(job) if job else []
+        if required_documents:
+            verified_documents = set(db.scalars(
+                select(KycDocument.document_type).where(
+                    KycDocument.candidate_id == app_row.candidate_id,
+                    KycDocument.status == "verified",
+                )
+            ).all())
+            missing = [document for document in required_documents if document not in verified_documents]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Required verified documents are missing: {', '.join(missing)}",
+                )
 
     evaluation = StageEvaluation(
         application_id=application_id,
@@ -183,21 +527,35 @@ def record_evaluation(
     )
     db.add(evaluation)
 
-    app_row.status = ApplicationStatus.IN_INTERVIEW
     if body.outcome == StageOutcome.PASSED:
         idx = _STAGE_ORDER.index(body.stage_type)
         if idx + 1 < len(_STAGE_ORDER):
             app_row.current_stage_type = _STAGE_ORDER[idx + 1]
+            next_stage = app_row.current_stage_type
+            if next_stage == StageType.CLIENT_INTERVIEW:
+                app_row.status = ApplicationStatus.IN_INTERVIEW
+            elif next_stage == StageType.DOCUMENT_VERIFICATION:
+                app_row.status = ApplicationStatus.DOCUMENTS
+            elif next_stage == StageType.KYC:
+                app_row.status = ApplicationStatus.KYC
+            elif next_stage == StageType.PLACEMENT:
+                app_row.status = ApplicationStatus.VALIDATED
         else:
             app_row.status = ApplicationStatus.PLACED
             candidate = db.get(Candidate, app_row.candidate_id)
             if candidate:
                 candidate.status = CandidateStatus.PLACED
-        if body.stage_type == StageType.CLIENT_INTERVIEW:
-            app_row.status = ApplicationStatus.SELECTED
+                candidate.pool_status = CandidatePoolStatus.PLACED
     elif body.outcome == StageOutcome.FAILED:
-        app_row.status = ApplicationStatus.REJECTED
+        _release_to_pool(db, app_row, body.remarks or f"{body.stage_type.value} not cleared")
+    elif body.outcome == StageOutcome.ON_HOLD:
+        app_row.status = ApplicationStatus.ON_HOLD
 
+    record_audit(
+        db, user_id=current_user.id, action="application.stage_evaluation",
+        entity_type="application", entity_id=app_row.id,
+        detail=f"{body.stage_type.value}:{body.outcome.value}", commit=False,
+    )
     db.commit()
     db.refresh(evaluation)
     return evaluation

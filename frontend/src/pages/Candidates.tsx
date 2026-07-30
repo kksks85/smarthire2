@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client";
 import { useReference } from "../hooks/useReference";
 import { Badge, Modal, PageHead } from "../components/ui";
-import type { Candidate, CandidatePii } from "../types";
+import type { CampaignImportResult, Candidate, CandidatePii } from "../types";
 
 export default function Candidates() {
   const ref = useReference();
@@ -18,6 +18,11 @@ export default function Candidates() {
   const [reveal, setReveal] = useState<{ c: Candidate; pii: CandidatePii } | null>(
     null
   );
+  const [showCampaignImport, setShowCampaignImport] = useState(false);
+  const [campaignResult, setCampaignResult] = useState<CampaignImportResult | null>(null);
+  const [campaignError, setCampaignError] = useState("");
+  const [campaignBusy, setCampaignBusy] = useState(false);
+  const campaignFileRef = useRef<HTMLInputElement>(null);
 
   function load() {
     const params: Record<string, string> = {};
@@ -50,15 +55,52 @@ export default function Candidates() {
     setReveal({ c, pii: data });
   }
 
+  async function importCampaign() {
+    const file = campaignFileRef.current?.files?.[0];
+    if (!file) {
+      setCampaignError("Select an Excel workbook to import.");
+      return;
+    }
+    setCampaignBusy(true);
+    setCampaignError("");
+    setCampaignResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post<CampaignImportResult>(
+        "/candidates/import-facebook-campaign",
+        formData
+      );
+      setCampaignResult(data);
+      load();
+    } catch (error: any) {
+      setCampaignError(error.response?.data?.detail ?? "Campaign import failed.");
+    } finally {
+      setCampaignBusy(false);
+    }
+  }
+
   return (
     <div>
       <PageHead
         title="Candidate Data Bank"
         breadcrumb="Candidate Data Bank › All Candidates"
         actions={
-          <button className="btn primary" onClick={() => navigate("/candidates/new")}>
-            + Register Candidate
-          </button>
+          <div className="btn-row">
+            <button
+              className="btn"
+              onClick={() => {
+                setCampaignError("");
+                setCampaignResult(null);
+                setShowCampaignImport(true);
+              }}
+            >
+              Import Facebook Campaign
+            </button>
+            <button className="btn primary" onClick={() => navigate("/candidates/new")}>
+              + Register Candidate
+            </button>
+          </div>
         }
       />
 
@@ -172,6 +214,38 @@ export default function Candidates() {
               <label>Address</label>
               <textarea readOnly value={reveal.pii.address ?? "—"} rows={2} />
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {showCampaignImport && (
+        <Modal title="Import Facebook Campaign Candidates" onClose={() => setShowCampaignImport(false)}>
+          <div className="inline-note">
+            Upload an .xlsx file with Name, Phone, and Question 1 / Answer 1 through
+            Question 5 / Answer 5. Existing phone numbers update only their Custom Questions.
+          </div>
+          <div className="field" style={{ marginTop: 14 }}>
+            <label>Excel workbook (.xlsx)</label>
+            <input ref={campaignFileRef} type="file" accept=".xlsx,.xlsm" />
+          </div>
+          {campaignError && <div className="error-note" style={{ marginTop: 12 }}>{campaignError}</div>}
+          {campaignResult && (
+            <div className="success-note" style={{ marginTop: 12 }}>
+              Created {campaignResult.created}, updated {campaignResult.updated}, skipped {campaignResult.skipped}.
+              {campaignResult.errors.length > 0 && (
+                <ul>
+                  {campaignResult.errors.slice(0, 5).map((error, index) => <li key={index}>{error}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="btn-row" style={{ marginTop: 14 }}>
+            <button className="btn primary" onClick={importCampaign} disabled={campaignBusy}>
+              {campaignBusy ? "Importing..." : "Import"}
+            </button>
+            <button className="btn" onClick={() => setShowCampaignImport(false)} disabled={campaignBusy}>
+              Cancel
+            </button>
           </div>
         </Modal>
       )}

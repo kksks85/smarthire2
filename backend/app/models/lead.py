@@ -17,6 +17,7 @@ class LeadInbound(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_detail: Mapped[Optional[str]] = mapped_column(String(255))
     raw_payload: Mapped[Optional[str]] = mapped_column(Text)  # JSON string
 
     full_name: Mapped[Optional[str]] = mapped_column(String(150))

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../api/client";
 import { useReference } from "../hooks/useReference";
 import { Badge, PageHead } from "../components/ui";
@@ -16,8 +17,10 @@ interface KycDoc {
 
 export default function Kyc() {
   const ref = useReference();
+  const [searchParams] = useSearchParams();
+  const applicationId = searchParams.get("application_id");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [selected, setSelected] = useState<number | "">("");
+  const [selected, setSelected] = useState<number | "">(() => Number(searchParams.get("candidate_id")) || "");
   const [docs, setDocs] = useState<KycDoc[]>([]);
   const [docType, setDocType] = useState("");
   const [msg, setMsg] = useState("");
@@ -46,6 +49,7 @@ export default function Kyc() {
     }
     const fd = new FormData();
     fd.append("document_type", docType);
+    if (applicationId) fd.append("application_id", applicationId);
     fd.append("file", fileRef.current.files[0]);
     await api.post(`/kyc/candidate/${selected}`, fd);
     setMsg("Document uploaded.");
@@ -65,6 +69,7 @@ export default function Kyc() {
   return (
     <div>
       <PageHead title="KYC Verification" breadcrumb="Recruitment › KYC Verification" />
+      {applicationId && <div className="inline-note">Documents uploaded here are linked to application #{applicationId}.</div>}
       {msg && <div className="success-note">{msg}</div>}
 
       <div className="list-toolbar">

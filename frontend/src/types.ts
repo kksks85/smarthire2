@@ -51,8 +51,23 @@ export interface Candidate {
   notes?: string | null;
   source: string;
   status: string;
+  pool_status: "available" | "reserved" | "in_process" | "placed";
   institution_id?: number | null;
+  custom_question_responses?: CustomQuestionResponse[];
   pii_masked: boolean;
+}
+
+export interface CustomQuestionResponse {
+  question_number: number;
+  question?: string | null;
+  answer?: string | null;
+}
+
+export interface CampaignImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface CandidatePii {
@@ -145,6 +160,10 @@ export interface Application {
   assigned_recruiter_id?: number | null;
   status: string;
   current_stage_type: string;
+  contact_attempt_count: number;
+  candidate_interest?: boolean | null;
+  released_at?: string | null;
+  release_reason?: string | null;
 }
 
 // ---------- Field agent registration drives ----------

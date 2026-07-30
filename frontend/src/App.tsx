@@ -14,6 +14,7 @@ import Employers from "./pages/Employers";
 import Institutions from "./pages/Institutions";
 import Leads from "./pages/Leads";
 import Pipeline from "./pages/Pipeline";
+import ScreenResources from "./pages/ScreenResources";
 import Kyc from "./pages/Kyc";
 import FieldCheckin from "./pages/FieldCheckin";
 import Locations from "./pages/Locations";
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/assignments" element={<Pipeline mineOnly />} />
         <Route path="/pipeline" element={<Pipeline />} />
+        <Route path="/screen-resources" element={<ScreenResources />} />
         <Route path="/kyc" element={<Kyc />} />
         <Route path="/field/checkin" element={<FieldCheckin />} />
         <Route path="/field/locations" element={<Locations />} />
@@ -73,6 +75,7 @@ export default function App() {
         <Route path="/pii-log" element={<PiiViewLog />} />
         <Route path="/institutions" element={<Institutions />} />
         <Route path="/employers" element={<Employers />} />
+        <Route path="/leads" element={<Leads />} />
         <Route path="/admin/users" element={<Users />} />
         <Route path="/admin/screening" element={<Screening />} />
         <Route path="/admin/stages" element={<Stages />} />

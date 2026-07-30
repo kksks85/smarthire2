@@ -39,7 +39,7 @@ services:
       - ./backend:/app
       - backend_uploads:/app/uploads
     ports:
-      - "8000:8000"
+      - "7000:8000"
     command: >
       sh -c "alembic upgrade head &&
              python -m app.seed &&
@@ -78,7 +78,7 @@ services:
     environment:
       VITE_PROXY_TARGET: http://backend:8000
     ports:
-      - "5173:5173"
+      - "5000:5000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

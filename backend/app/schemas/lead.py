@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -22,6 +23,7 @@ class LeadOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     source: str
+    source_detail: Optional[str] = None
     full_name: Optional[str] = None
     phone: Optional[str] = None
     trade: Optional[str] = None
@@ -29,3 +31,4 @@ class LeadOut(BaseModel):
     state: Optional[str] = None
     status: LeadStatus
     candidate_id: Optional[int] = None
+    created_at: datetime

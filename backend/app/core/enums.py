@@ -30,6 +30,13 @@ class CandidateStatus(str, enum.Enum):
     BLACKLISTED = "blacklisted"
 
 
+class CandidatePoolStatus(str, enum.Enum):
+    AVAILABLE = "available"
+    RESERVED = "reserved"
+    IN_PROCESS = "in_process"
+    PLACED = "placed"
+
+
 class JobStatus(str, enum.Enum):
     DRAFT = "draft"
     PENDING_APPROVAL = "pending_approval"
@@ -48,10 +55,17 @@ class ApprovalDecision(str, enum.Enum):
 
 class ApplicationStatus(str, enum.Enum):
     ASSIGNED = "assigned"
+    CONTACT_PENDING = "contact_pending"
+    SCREENING = "screening"
     IN_INTERVIEW = "in_interview"
+    DOCUMENTS = "documents"
+    KYC = "kyc"
+    VALIDATED = "validated"
     SELECTED = "selected"
+    ON_HOLD = "on_hold"
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"
+    RELEASED = "released"
     PLACED = "placed"
 
 
@@ -59,6 +73,7 @@ class StageType(str, enum.Enum):
     SCREENING = "screening"
     CLIENT_INTERVIEW = "client_interview"
     DOCUMENT_VERIFICATION = "document_verification"
+    KYC = "kyc"
     PLACEMENT = "placement"
 
 

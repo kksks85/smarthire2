@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core.enums import CandidateSource, CandidateStatus
+from app.core.enums import CandidatePoolStatus, CandidateSource, CandidateStatus
 
 
 class CandidateBase(BaseModel):
@@ -55,6 +55,15 @@ class CandidateUpdate(BaseModel):
     profile_data: Optional[dict[str, Any]] = None
 
 
+
+class CustomQuestionResponseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    question_number: int
+    question: Optional[str] = None
+    answer: Optional[str] = None
+
+
 class CandidateOut(BaseModel):
     """Candidate representation with PII masked by default."""
 
@@ -83,8 +92,10 @@ class CandidateOut(BaseModel):
     profile_data: Optional[dict[str, Any]] = None
     source: CandidateSource
     status: CandidateStatus
+    pool_status: CandidatePoolStatus
     institution_id: Optional[int] = None
     field_drive_id: Optional[int] = None
+    custom_question_responses: list[CustomQuestionResponseOut] = []
     pii_masked: bool = True
 
 
@@ -109,3 +120,4 @@ class PublicRegistration(BaseModel):
     experience_years: Optional[int] = 0
     job_slug: Optional[str] = None
     drive_slug: Optional[str] = None
+    registration_channel: Optional[str] = None

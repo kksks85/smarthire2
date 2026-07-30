@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Optional
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text
+from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import CandidateSource, CandidateStatus
+from app.core.enums import CandidatePoolStatus, CandidateSource, CandidateStatus
 from app.db.session import Base
 from app.models.mixins import TimestampMixin
 
@@ -61,6 +61,9 @@ class Candidate(Base, TimestampMixin):
     status: Mapped[CandidateStatus] = mapped_column(
         String(20), default=CandidateStatus.NEW, nullable=False
     )
+    pool_status: Mapped[CandidatePoolStatus] = mapped_column(
+        String(20), default=CandidatePoolStatus.AVAILABLE, nullable=False, index=True
+    )
     institution_id: Mapped[Optional[int]] = mapped_column(ForeignKey("institutions.id"))
     registered_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     field_drive_id: Mapped[Optional[int]] = mapped_column(ForeignKey("field_drives.id"))
@@ -68,3 +71,27 @@ class Candidate(Base, TimestampMixin):
     field_drive: Mapped[Optional["FieldDrive"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
         back_populates="candidates"
     )
+    custom_question_responses: Mapped[list["CandidateCustomQuestionResponse"]] = relationship(
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        order_by="CandidateCustomQuestionResponse.question_number",
+    )
+
+
+class CandidateCustomQuestionResponse(Base, TimestampMixin):
+    """Question-and-answer pair captured from a social campaign import."""
+
+    __tablename__ = "candidate_custom_question_responses"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "question_number", name="uq_candidate_custom_question_number"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(
+        ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    question_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    question: Mapped[Optional[str]] = mapped_column(Text)
+    answer: Mapped[Optional[str]] = mapped_column(Text)
+
+    candidate: Mapped["Candidate"] = relationship(back_populates="custom_question_responses")

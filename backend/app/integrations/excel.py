@@ -27,6 +27,12 @@ COLUMN_MAP = {
     "expected salary": "expected_salary",
 }
 
+CAMPAIGN_HEADERS = [
+    "name",
+    "phone",
+    *(header for number in range(1, 6) for header in (f"question {number}", f"answer {number}")),
+]
+
 
 def parse_candidate_workbook(content: bytes) -> tuple[list[dict[str, Any]], list[str]]:
     """Parse an .xlsx file into candidate dicts. Returns (rows, errors)."""
@@ -66,4 +72,50 @@ def parse_candidate_workbook(content: bytes) -> tuple[list[dict[str, Any]], list
                     record.pop(int_field)
         rows.append(record)
 
+    return rows, errors
+
+
+def parse_campaign_workbook(content: bytes) -> tuple[list[dict[str, Any]], list[str]]:
+    """Parse the fixed five-question Facebook campaign workbook template."""
+    wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    errors: list[str] = []
+    header_cells = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+    if not header_cells:
+        return [], ["Worksheet is empty."]
+
+    headers = [str(header).strip().lower() if header is not None else "" for header in header_cells]
+    header_positions = {header: index for index, header in enumerate(headers) if header}
+    missing_headers = [header.title() for header in CAMPAIGN_HEADERS if header not in header_positions]
+    if missing_headers:
+        return [], [f"Missing required columns: {', '.join(missing_headers)}."]
+
+    rows: list[dict[str, Any]] = []
+    for row_number, raw in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not raw or all(value is None for value in raw):
+            continue
+
+        def cell(header: str) -> str | None:
+            value = raw[header_positions[header]] if header_positions[header] < len(raw) else None
+            return str(value).strip() if value is not None else None
+
+        full_name = cell("name")
+        phone = cell("phone")
+        if not full_name or not phone:
+            errors.append(f"Row {row_number}: missing required Name or Phone - skipped.")
+            continue
+        rows.append(
+            {
+                "full_name": full_name,
+                "phone": phone,
+                "responses": [
+                    {
+                        "question_number": number,
+                        "question": cell(f"question {number}"),
+                        "answer": cell(f"answer {number}"),
+                    }
+                    for number in range(1, 6)
+                ],
+            }
+        )
     return rows, errors

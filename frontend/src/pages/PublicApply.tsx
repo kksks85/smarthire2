@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 interface PublicJob {
@@ -18,6 +18,7 @@ interface PublicJob {
 
 export default function PublicApply() {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
   const [job, setJob] = useState<PublicJob | null>(null);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
@@ -45,6 +46,7 @@ export default function PublicApply() {
       ...form,
       experience_years: Number(form.experience_years) || 0,
       job_slug: slug,
+      registration_channel: searchParams.get("source") || "website",
     });
     setDone(true);
   }

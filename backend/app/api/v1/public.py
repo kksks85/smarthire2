@@ -10,6 +10,7 @@ from app.models.job import JobPosting
 from app.models.user import User
 from app.schemas.candidate import PublicRegistration
 from app.schemas.field_drive import PublicDriveInfo
+from app.services.inbound_leads import capture_candidate_registration
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -70,6 +71,10 @@ def public_register(body: PublicRegistration, db: Session = Depends(get_db)):
 
     if drive:
         source = CandidateSource.FIELD_AGENT
+    elif body.registration_channel in {"facebook", "linkedin"}:
+        source = CandidateSource.SOCIAL_MEDIA
+    elif body.registration_channel == "website":
+        source = CandidateSource.WEBSITE
     elif body.job_slug:
         source = CandidateSource.QR_SELF_REGISTRATION
     else:
@@ -86,7 +91,10 @@ def public_register(body: PublicRegistration, db: Session = Depends(get_db)):
         source=source,
         registered_by_id=drive.field_agent_id if drive else None,
         field_drive_id=drive.id if drive else None,
+        profile_data={"registration_channel": body.registration_channel} if body.registration_channel else {},
     )
     db.add(candidate)
+    db.flush()
+    capture_candidate_registration(db, candidate)
     db.commit()
     return {"message": "Registration received. Our team will contact you shortly."}
