@@ -116,7 +116,7 @@ def parse_candidate_workbook(content: bytes) -> tuple[list[dict[str, Any]], list
     if not header_cells:
         return [], ["Worksheet is empty."]
 
-    headers = [str(h).strip().lower() if h is not None else "" for h in header_cells]
+    headers = [_clean_header(str(h)) if h is not None else "" for h in header_cells]
 
     for idx, raw in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if raw is None or all(c is None for c in raw):
@@ -125,15 +125,17 @@ def parse_candidate_workbook(content: bytes) -> tuple[list[dict[str, Any]], list
         for col_idx, value in enumerate(raw):
             if col_idx >= len(headers):
                 break
-            field = COLUMN_MAP.get(headers[col_idx])
+            field = INSTITUTION_TEMPLATE_COLUMNS.get(headers[col_idx])
             if field and value is not None:
                 record[field] = value
 
-        if not record.get("full_name") or not record.get("phone"):
-            errors.append(f"Row {idx}: missing required Name or Phone — skipped.")
+        if not record.get("full_name") or not record.get("phone") or not record.get("primary_trade"):
+            errors.append(
+                f"Row {idx}: missing required Student Name / Mobile Number / Trade - skipped."
+            )
             continue
 
-        record["phone"] = str(record["phone"]).strip()
+        record["phone"] = "".join(ch for ch in str(record["phone"]) if ch.isdigit())
         record["full_name"] = str(record["full_name"]).strip()
         for int_field in ("experience_years", "expected_salary"):
             if int_field in record:
