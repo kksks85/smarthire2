@@ -123,7 +123,11 @@ def parse_institution_csv(content: bytes) -> tuple[list[dict[str, Any]], list[st
         return [], ["CSV header row is missing."]
 
     fieldnames = [name.strip().lower() for name in reader.fieldnames if name]
-    required = {"name", "phone", "trade"}
+    required = {
+        "student name",
+        "mobile number",
+        "course / trade / specialization",
+    }
     if not required.issubset(set(fieldnames)):
         missing = ", ".join(required - set(fieldnames))
         return [], [f"CSV is missing required columns: {missing}."]

@@ -71,38 +71,6 @@ def create_institution(
     return inst
 
 
-@router.post("/{institution_id}/upload-candidates")
-async def upload_candidates(
-    institution_id: int,
-    file: UploadFile,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(_UPLOADERS),
-):
-    inst = db.get(Institution, institution_id)
-    if not inst:
-        raise HTTPException(status_code=404, detail="Institution not found")
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
-        raise HTTPException(status_code=400, detail="Please upload an .xlsx file")
-
-    content = await file.read()
-    rows, errors = parse_candidate_workbook(content)
-
-    created = 0
-    for record in rows:
-        db.add(
-            Candidate(
-                **record,
-                source=CandidateSource.INSTITUTION_UPLOAD,
-                institution_id=institution_id,
-                registered_by_id=current_user.id,
-            )
-        )
-        created += 1
-    db.commit()
-
-    return {"created": created, "skipped": len(errors), "errors": errors}
-
-
 @router.post("/me/upload-candidates", response_model=InstitutionUploadSummary)
 async def upload_candidates_me(
     file: UploadFile = File(...),
@@ -190,6 +158,38 @@ async def upload_candidates_me(
     except Exception:
         db.rollback()
         raise
+
+    return {"created": created, "skipped": len(errors), "errors": errors}
+
+
+@router.post("/{institution_id}/upload-candidates")
+async def upload_candidates(
+    institution_id: int,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_UPLOADERS),
+):
+    inst = db.get(Institution, institution_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Institution not found")
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Please upload an .xlsx file")
+
+    content = await file.read()
+    rows, errors = parse_candidate_workbook(content)
+
+    created = 0
+    for record in rows:
+        db.add(
+            Candidate(
+                **record,
+                source=CandidateSource.INSTITUTION_UPLOAD,
+                institution_id=institution_id,
+                registered_by_id=current_user.id,
+            )
+        )
+        created += 1
+    db.commit()
 
     return {"created": created, "skipped": len(errors), "errors": errors}
 
