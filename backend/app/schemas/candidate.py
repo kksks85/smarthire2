@@ -108,6 +108,12 @@ class CandidatePii(BaseModel):
     address: Optional[str] = None
 
 
+class StudentCentralOut(CandidateOut):
+    """Admin view of all institution-uploaded candidates with institution details."""
+
+    institution_name: Optional[str] = None
+
+
 class PublicRegistration(BaseModel):
     """Public self-registration via QR / website (no auth)."""
 

@@ -7,12 +7,14 @@ from app.core.enums import CandidateSource, CandidateStatus, RoleName
 from app.db.session import get_db
 from app.integrations.excel import parse_campaign_workbook
 from app.models.candidate import Candidate, CandidateCustomQuestionResponse
+from app.models.org import Institution
 from app.models.user import User
 from app.schemas.candidate import (
     CandidateCreate,
     CandidateOut,
     CandidatePii,
     CandidateUpdate,
+    StudentCentralOut,
 )
 from app.services.audit import record_pii_access
 from app.services.inbound_leads import capture_candidate_registration
@@ -28,6 +30,9 @@ _CAMPAIGN_IMPORTERS = require_roles(RoleName.ADMIN, RoleName.MANAGER, RoleName.R
 
 def normalize_phone(phone: str) -> str:
     return "".join(character for character in phone if character.isdigit())
+
+
+_ADMIN_MGR = require_roles(RoleName.ADMIN, RoleName.MANAGER)
 
 
 def serialize_masked(c: Candidate) -> CandidateOut:
@@ -71,6 +76,53 @@ def list_candidates(
         "total": total,
         "items": [serialize_masked(c) for c in rows],
     }
+
+
+@router.get("/student-central", response_model=dict)
+def student_central(
+    q: str | None = None,
+    trade: str | None = None,
+    state: str | None = None,
+    status: CandidateStatus | None = None,
+    institution_id: int | None = None,
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: User = Depends(_ADMIN_MGR),
+):
+    """Admin central repository of all candidates uploaded by institutions."""
+    stmt = (
+        select(Candidate, Institution.name.label("institution_name"))
+        .join(Institution, Candidate.institution_id == Institution.id, isouter=True)
+        .where(Candidate.source == CandidateSource.INSTITUTION_UPLOAD)
+    )
+    if q:
+        stmt = stmt.where(Candidate.full_name.ilike(f"%{q}%"))
+    if trade:
+        stmt = stmt.where(Candidate.primary_trade == trade)
+    if state:
+        stmt = stmt.where(Candidate.state == state)
+    if status:
+        stmt = stmt.where(Candidate.status == status)
+    if institution_id:
+        stmt = stmt.where(Candidate.institution_id == institution_id)
+
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = db.execute(
+        stmt.order_by(Candidate.created_at.desc()).limit(limit).offset(offset)
+    ).all()
+
+    items: list[StudentCentralOut] = []
+    for candidate, institution_name in rows:
+        out = StudentCentralOut.model_validate(candidate)
+        out.phone = mask_phone(candidate.phone)
+        out.email = mask_email(candidate.email)
+        out.address = mask_address(candidate.address)
+        out.institution_name = institution_name
+        out.pii_masked = True
+        items.append(out)
+
+    return {"total": total, "items": items}
 
 
 @router.post("/import-facebook-campaign")

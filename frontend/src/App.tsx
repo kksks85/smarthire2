@@ -24,6 +24,7 @@ import Users from "./pages/admin/Users";
 import Screening from "./pages/admin/Screening";
 import Stages from "./pages/admin/Stages";
 import Audit from "./pages/admin/Audit";
+import StudentCentral from "./pages/admin/StudentCentral";
 import EmailAccounts from "./pages/admin/EmailAccounts";
 import EmailTemplates from "./pages/admin/EmailTemplates";
 import EmailRules from "./pages/admin/EmailRules";
@@ -84,6 +85,7 @@ export default function App() {
         <Route path="/admin/users" element={<Users />} />
         <Route path="/admin/screening" element={<Screening />} />
         <Route path="/admin/stages" element={<Stages />} />
+        <Route path="/admin/student-central" element={<StudentCentral />} />
         <Route path="/admin/audit" element={<Audit />} />
         <Route path="/admin/email/accounts" element={<EmailAccounts />} />
         <Route path="/admin/email/templates" element={<EmailTemplates />} />

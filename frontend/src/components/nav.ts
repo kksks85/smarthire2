@@ -80,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Administration",
     modules: [
       { label: "Users & Roles", path: "/admin/users", roles: ["admin"] },
+      { label: "Student Central", path: "/admin/student-central", roles: ["admin", "manager"] },
       { label: "Screening Questions", path: "/admin/screening", roles: ["admin"] },
       { label: "Interview Stages", path: "/admin/stages", roles: ["admin"] },
       { label: "Email Accounts", path: "/admin/email/accounts", roles: ["admin"] },
