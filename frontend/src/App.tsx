@@ -37,6 +37,7 @@ import PublicDriveApply from "./pages/PublicDriveApply";
 import InstitutionDashboard from "./pages/institution/InstitutionDashboard";
 import InstitutionUpload from "./pages/institution/InstitutionUpload";
 import InstitutionCandidates from "./pages/institution/InstitutionCandidates";
+import InstitutionCandidateForm from "./pages/institution/InstitutionCandidateForm";
 import InstitutionUploadLogs from "./pages/institution/InstitutionUploadLogs";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="/institution" element={<InstitutionDashboard />} />
         <Route path="/institution/upload" element={<InstitutionUpload />} />
         <Route path="/institution/candidates" element={<InstitutionCandidates />} />
+        <Route path="/institution/candidates/new" element={<InstitutionCandidateForm />} />
         <Route path="/institution/uploads" element={<InstitutionUploadLogs />} />
       </Route>
 

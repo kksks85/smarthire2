@@ -33,9 +33,14 @@ export default function InstitutionDashboard() {
         title={`Welcome, ${user?.full_name.split(" ")[0]}`}
         breadcrumb="Institution Portal › Dashboard"
         actions={
-          <button className="btn primary" onClick={() => navigate("/institution/upload")}>
-            + Upload Candidates
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn primary" onClick={() => navigate("/institution/candidates/new")}>
+              + Add Candidate
+            </button>
+            <button className="btn" onClick={() => navigate("/institution/upload")}>
+              Upload Candidates
+            </button>
+          </div>
         }
       />
 

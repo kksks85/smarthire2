@@ -16,6 +16,7 @@ from app.models.candidate import Candidate
 from app.models.org import Institution, InstitutionUploadLog
 from app.models.user import User
 from app.schemas.candidate import CandidateOut
+from app.schemas.candidate import CandidateCreate, CandidateOut
 from app.schemas.org import (
     InstitutionCreate,
     InstitutionOut,
@@ -210,6 +211,30 @@ def list_upload_logs(
         .offset(offset)
     )
     return db.scalars(stmt).all()
+
+
+@router.post("/me/candidates", response_model=CandidateOut)
+def create_my_candidate(
+    body: CandidateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_UPLOADERS),
+):
+    """Allow a placement officer to add a single candidate for their institution."""
+    inst = _get_current_institution(db, current_user)
+    candidate = Candidate(
+        **body.model_dump(exclude_unset=True),
+        source=CandidateSource.INSTITUTION_UPLOAD,
+        institution_id=inst.id,
+        registered_by_id=current_user.id,
+    )
+    db.add(candidate)
+    db.commit()
+    db.refresh(candidate)
+    out = CandidateOut.model_validate(candidate)
+    out.phone = mask_phone(candidate.phone)
+    out.email = mask_email(candidate.email)
+    out.pii_masked = True
+    return out
 
 
 @router.get("/me/candidates", response_model=list[CandidateOut])

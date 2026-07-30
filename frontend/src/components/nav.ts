@@ -71,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
     modules: [
       { label: "Dashboard", path: "/institution", roles: ["institution"] },
       { label: "Upload Candidates", path: "/institution/upload", roles: ["institution"] },
+      { label: "Add Candidate", path: "/institution/candidates/new", roles: ["institution"] },
       { label: "My Candidates", path: "/institution/candidates", roles: ["institution"] },
       { label: "Upload Logs", path: "/institution/uploads", roles: ["institution"] },
     ],
