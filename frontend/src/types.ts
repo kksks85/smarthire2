@@ -55,6 +55,7 @@ export interface Candidate {
   institution_id?: number | null;
   custom_question_responses?: CustomQuestionResponse[];
   pii_masked: boolean;
+  profile_data?: Record<string, any> | null;
 }
 
 export interface CustomQuestionResponse {
