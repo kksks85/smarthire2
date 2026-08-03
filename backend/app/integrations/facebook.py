@@ -41,6 +41,7 @@ class FacebookService:
 
         # Prepare rich job caption
         job_content = f"🌟 WE ARE HIRING: {title.upper()}! 🌟\n\n"
+        job_content += "🏢 Employer: LAYAM\n"
         job_content += f"📍 Location: {location}\n"
         
         if salary_min and salary_max:

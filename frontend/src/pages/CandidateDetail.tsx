@@ -99,7 +99,14 @@ export default function CandidateDetail() {
               value={c.expected_salary ? `₹ ${c.expected_salary}/mo` : "—"}
             />
             <Item label="City / State" value={[c.city, c.state].filter(Boolean).join(", ")} />
-            <Item label="Source" value={c.source} />
+            <Item
+              label="Source"
+              value={
+                c.profile_data?.registration_channel
+                  ? `${c.source.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())} (${c.profile_data.registration_channel.charAt(0).toUpperCase() + c.profile_data.registration_channel.slice(1)})`
+                  : c.source.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+              }
+            />
             <Item label="Phone (masked)" value={c.phone} mono />
             <Item label="Driving License" value={c.has_driving_license ? "Yes" : "No"} />
             <Item label="Relocate" value={c.willing_to_relocate ? "Yes" : "No"} />

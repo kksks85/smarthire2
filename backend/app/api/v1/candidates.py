@@ -1,4 +1,8 @@
+import io
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -124,6 +128,72 @@ def student_central(
         items.append(out)
 
     return {"total": total, "items": items}
+
+
+@router.get("/facebook-campaign-template")
+def download_facebook_campaign_template(_: User = Depends(_STAFF)):
+    """Download the official Excel template for Facebook Campaign bulk candidate import."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "FB Campaign Import Template"
+
+    headers = [
+        "Name",
+        "Phone",
+        "Question 1",
+        "Answer 1",
+        "Question 2",
+        "Answer 2",
+        "Question 3",
+        "Answer 3",
+        "Question 4",
+        "Answer 4",
+        "Question 5",
+        "Answer 5",
+    ]
+    ws.append(headers)
+
+    ws.append([
+        "Kamal Sharma",
+        "9876543210",
+        "Primary Trade / Skill",
+        "Wiring DB Install",
+        "Years of Experience",
+        "3",
+        "Current City",
+        "Surat",
+        "Highest Qualification",
+        "ITI Electrician",
+        "Expected Monthly Salary (INR)",
+        "18000",
+    ])
+    ws.append([
+        "Uttam Choyal",
+        "9876543211",
+        "Primary Trade / Skill",
+        "Fitter",
+        "Years of Experience",
+        "2",
+        "Current City",
+        "Ahmedabad",
+        "Highest Qualification",
+        "12th Pass",
+        "Expected Monthly Salary (INR)",
+        "16000",
+    ])
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    res_headers = {
+        "Content-Disposition": 'attachment; filename="facebook_campaign_template.xlsx"'
+    }
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=res_headers,
+    )
 
 
 @router.post("/import-facebook-campaign")

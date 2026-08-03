@@ -63,8 +63,9 @@ export default function InstitutionCandidateForm() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.full_name || !form.phone || !form.primary_trade) {
-      setError("Student Name, Mobile Number and Course / Trade / Specialization are required.");
+    if (!form.full_name.trim() || !form.phone.trim()) {
+      alert("mandatory fields should be filled");
+      setError("mandatory fields should be filled");
       return;
     }
     setBusy(true);
@@ -74,7 +75,7 @@ export default function InstitutionCandidateForm() {
     const payload: any = {
       full_name: form.full_name.trim(),
       phone: form.phone.replace(/\D/g, ""),
-      primary_trade: form.primary_trade.trim(),
+      primary_trade: form.primary_trade.trim() || undefined,
       gender: form.gender || undefined,
       city: form.city.trim() || undefined,
       state: form.state.trim() || undefined,
@@ -131,7 +132,7 @@ export default function InstitutionCandidateForm() {
               <label>Mobile Number</label>
               <input value={form.phone} onChange={(e) => update("phone", e.target.value)} />
             </div>
-            <div className="field required">
+            <div className="field">
               <label>Course / Trade / Specialization</label>
               <input value={form.primary_trade} onChange={(e) => update("primary_trade", e.target.value)} />
             </div>

@@ -40,6 +40,7 @@ KYC_DOCUMENT_TYPES = [
     "Passport", "Ration Card", "Bank Passbook / Cancelled Cheque",
     "ESIC Card", "UAN / PF Number", "Police Verification Certificate",
     "Medical Fitness Certificate", "Passport Photo",
+    "10th Certificate", "Inter Certificate", "Graduation Certificate", "PG Certificate",
 ]
 
 # Employment / engagement types

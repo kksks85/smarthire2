@@ -91,6 +91,23 @@ export default function Candidates() {
     }
   }
 
+  async function downloadTemplate() {
+    try {
+      const response = await api.get("/candidates/facebook-campaign-template", {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "facebook_campaign_template.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      alert("Failed to download template.");
+    }
+  }
+
   return (
     <div>
       <PageHead
@@ -185,7 +202,14 @@ export default function Candidates() {
               </td>
               <td className="pii">{c.phone}</td>
               <td>
-                <Badge value={c.source} />
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  <Badge value={c.source} />
+                  {c.profile_data?.registration_channel && (
+                    <span style={{ fontSize: "11px", color: "#5c6b73", fontWeight: 500 }}>
+                      ({c.profile_data.registration_channel.charAt(0).toUpperCase() + c.profile_data.registration_channel.slice(1)})
+                    </span>
+                  )}
+                </div>
               </td>
               <td>
                 <Badge value={c.status} />
@@ -252,6 +276,11 @@ export default function Candidates() {
           <div className="inline-note">
             Upload an .xlsx file with Name, Phone, and Question 1 / Answer 1 through
             Question 5 / Answer 5. Existing phone numbers update only their Custom Questions.
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="btn" onClick={downloadTemplate}>
+              📥 Download Excel Template
+            </button>
           </div>
           <div className="field" style={{ marginTop: 14 }}>
             <label>Excel workbook (.xlsx)</label>

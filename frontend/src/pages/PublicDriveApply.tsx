@@ -52,6 +52,11 @@ export default function PublicDriveApply() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.full_name?.trim() || !form.phone?.trim() || !form.city?.trim()) {
+      alert("mandatory fields should be filled");
+      setErr("mandatory fields should be filled");
+      return;
+    }
     await axios.post("/api/v1/public/register", {
       ...form,
       experience_years: Number(form.experience_years) || 0,
@@ -90,7 +95,7 @@ export default function PublicDriveApply() {
           drive && (
             <form onSubmit={submit}>
               <div className="field">
-                <label>Full Name</label>
+                <label>Full Name *</label>
                 <input
                   required
                   value={form.full_name}
@@ -98,12 +103,12 @@ export default function PublicDriveApply() {
                 />
               </div>
               <div className="field">
-                <label>Phone</label>
+                <label>Phone *</label>
                 <input required value={form.phone} onChange={(e) => set("phone", e.target.value)} />
               </div>
               <div className="field">
-                <label>City</label>
-                <input value={form.city} onChange={(e) => set("city", e.target.value)} />
+                <label>City *</label>
+                <input required value={form.city} onChange={(e) => set("city", e.target.value)} />
               </div>
               <div className="field">
                 <label>Trade / Skill</label>

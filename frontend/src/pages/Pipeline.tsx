@@ -41,6 +41,16 @@ const APP_STATUSES = [
   "released",
 ];
 
+const CANDIDATE_SOURCES = [
+  { key: "website", label: "Website" },
+  { key: "social_media", label: "Social Media" },
+  { key: "field_agent", label: "Field Agent" },
+  { key: "qr_self_registration", label: "QR Self Reg" },
+  { key: "institution_upload", label: "Institution" },
+  { key: "inbound_webhook", label: "Webhook" },
+  { key: "manual", label: "Manual" },
+];
+
 export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -52,6 +62,7 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
   const [active, setActive] = useState<Application | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "");
   const [jobFilter, setJobFilter] = useState<string>(searchParams.get("job_id") || "");
+  const [sourceFilter, setSourceFilter] = useState<string>(searchParams.get("source") || "");
 
   const canAssign = user?.role === "manager" || user?.role === "admin";
 
@@ -88,10 +99,11 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
     const next: Record<string, string> = {};
     if (statusFilter) next.status = statusFilter;
     if (jobFilter) next.job_id = jobFilter;
+    if (sourceFilter) next.source = sourceFilter;
     setSearchParams(next, { replace: true });
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mineOnly, statusFilter, jobFilter]);
+  }, [mineOnly, statusFilter, jobFilter, sourceFilter]);
 
   async function assign(appId: number, recruiterId: number) {
     await api.post(`/applications/${appId}/assign`, {
@@ -99,6 +111,12 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
     });
     load();
   }
+
+  const filteredApps = apps.filter((a) => {
+    if (!sourceFilter) return true;
+    const candidate = candidates[a.candidate_id];
+    return candidate?.source === sourceFilter;
+  });
 
   return (
     <div>
@@ -127,9 +145,20 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
             <option key={j.id} value={j.id}>{j.title}</option>
           ))}
         </select>
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value)}
+        >
+          <option value="">All sources</option>
+          {CANDIDATE_SOURCES.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.label}
+            </option>
+          ))}
+        </select>
         <div className="spacer" />
         <span className="muted">
-          {apps.length} application{apps.length === 1 ? "" : "s"}
+          {filteredApps.length} application{filteredApps.length === 1 ? "" : "s"}
         </span>
       </div>
       <div className="pipeline-table-wrap">
@@ -137,19 +166,37 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
         <thead>
           <tr>
             <th>Candidate</th>
+            <th>Source</th>
             <th>Requisition</th>
             <th>Stage</th>
             <th>Progress</th>
-            <th>Owner</th>
+            <th>Assigned Recruiter</th>
             <th>Next action</th>
           </tr>
         </thead>
         <tbody>
-          {apps.map((a) => (
+          {filteredApps.map((a) => (
             <tr key={a.id}>
               <td>
                 <button className="btn link candidate-link" onClick={() => navigate(`/candidates/${a.candidate_id}`)}>{candidates[a.candidate_id]?.full_name ?? `Candidate #${a.candidate_id}`}</button>
                 <span className="pipeline-id">#{a.candidate_id}</span>
+              </td>
+              <td>
+                {(() => {
+                  const c = candidates[a.candidate_id];
+                  if (!c) return <Badge value="manual" />;
+                  const channel = c.profile_data?.registration_channel;
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <Badge value={c.source ?? "manual"} />
+                      {channel && (
+                        <span style={{ fontSize: "11px", color: "#5c6b73", fontWeight: 500 }}>
+                          ({channel.charAt(0).toUpperCase() + channel.slice(1)})
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </td>
               <td>
                 <span className="pipeline-job" title={jobs[a.job_id]?.title}>{jobs[a.job_id]?.title ?? `Job #${a.job_id}`}</span>
@@ -180,9 +227,9 @@ export default function Pipeline({ mineOnly = false }: { mineOnly?: boolean }) {
               </td>
             </tr>
           ))}
-          {apps.length === 0 && (
+          {filteredApps.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted" style={{ textAlign: "center", padding: 20 }}>
+              <td colSpan={7} className="muted" style={{ textAlign: "center", padding: 20 }}>
                 No applications in the pipeline.
               </td>
             </tr>

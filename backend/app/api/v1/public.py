@@ -1,19 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.enums import ApplicationStatus, CandidatePoolStatus, CandidateSource, JobStatus
+from app.core.enums import ApplicationStatus, CandidatePoolStatus, CandidateSource, JobStatus, KycStatus
 from app.db.session import get_db
 from app.models.candidate import Candidate
 from app.models.field_drive import FieldDrive
 from app.models.job import JobPosting
 from app.models.pipeline import Application
 from app.models.user import User
+from app.models.kyc import KycDocument
 from app.schemas.candidate import PublicRegistration
 from app.schemas.field_drive import PublicDriveInfo
 from app.api.v1.admin import get_public_base_url
 from app.services.inbound_leads import capture_candidate_registration
+from app.integrations.storage import storage
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -37,6 +39,8 @@ def public_job(slug: str, db: Session = Depends(get_db)):
         "accommodation_provided": job.accommodation_provided,
         "slug": job.public_slug,
         "required_candidate_fields": job.required_candidate_fields or {},
+        "documents_required": job.documents_required or {},
+        "employer": "LAYAM",
     }
 
 
@@ -50,7 +54,7 @@ def public_job_share(slug: str, db: Session = Depends(get_db)):
     base = get_public_base_url(db)
     target_url = f"{base}/careers/{slug}"
     
-    title = f"{job.title} at SmartHire"
+    title = f"{job.title} at LAYAM"
     location = f"{job.work_city}, {job.work_state}" if job.work_city else "Remote"
     salary = f"₹{job.salary_min}-₹{job.salary_max}/mo" if job.salary_min else "Competitive Salary"
     
@@ -187,3 +191,31 @@ def public_register(body: PublicRegistration, db: Session = Depends(get_db)):
 
     db.commit()
     return {"message": "Registration received. Our team will contact you shortly.", "candidate_id": candidate.id}
+
+
+@router.post("/register/{candidate_id}/upload-document", status_code=201)
+async def public_upload_document(
+    candidate_id: int,
+    document_type: str = Form(...),
+    file: UploadFile = ...,
+    db: Session = Depends(get_db),
+):
+    """Public document upload for newly registered candidates (no auth)."""
+    candidate = db.get(Candidate, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    content = await file.read()
+    key = storage.save(content, file.filename or "document", file.content_type)
+    doc = KycDocument(
+        candidate_id=candidate_id,
+        document_type=document_type,
+        file_key=key,
+        original_filename=file.filename,
+        content_type=file.content_type,
+        status=KycStatus.SUBMITTED,
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return {"id": doc.id, "document_type": doc.document_type}

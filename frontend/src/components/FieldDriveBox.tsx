@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { capturePosition } from "../hooks/useFieldAgentTracker";
+import { useReference } from "../hooks/useReference";
 import { Badge, Modal } from "./ui";
 import type { DriveSetupType, FieldDrive, FieldDriveShareKit } from "../types";
 
@@ -62,6 +63,7 @@ function setupLabel(d: FieldDrive): string {
  */
 export default function FieldDriveBox() {
   const navigate = useNavigate();
+  const ref = useReference();
   const [drives, setDrives] = useState<FieldDrive[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -72,6 +74,20 @@ export default function FieldDriveBox() {
   const [shareKit, setShareKit] = useState<FieldDriveShareKit | null>(null);
   const [shareDriveName, setShareDriveName] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Candidate quick registration popup states
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registerDriveId, setRegisterDriveId] = useState<number | null>(null);
+  const [registerBusy, setRegisterBusy] = useState(false);
+  const [registerErr, setRegisterErr] = useState("");
+  const [registerSuccess, setRegisterSuccess] = useState(false);
+  const [registerForm, setRegisterForm] = useState({
+    full_name: "",
+    phone: "",
+    email: "",
+    aadhaar_number: "",
+    preferred_role: "",
+  });
 
   async function refresh() {
     try {
@@ -157,6 +173,80 @@ export default function FieldDriveBox() {
     await refresh();
   }
 
+  function openRegisterCandidate(d: FieldDrive) {
+    setRegisterDriveId(d.id);
+    setRegisterForm({
+      full_name: "",
+      phone: "",
+      email: "",
+      aadhaar_number: "",
+      preferred_role: "",
+    });
+    setRegisterErr("");
+    setRegisterSuccess(false);
+    setShowRegisterModal(true);
+  }
+
+  async function handleRegisterSubmit() {
+    const phone = registerForm.phone.replace(/\D/g, "");
+    if (!registerForm.full_name.trim() || !phone.trim()) {
+      alert("mandatory fields should be filled");
+      setRegisterErr("mandatory fields should be filled");
+      return;
+    }
+    if (!/^\d{10}$/.test(phone)) {
+      setRegisterErr("Enter a valid 10-digit mobile number.");
+      return;
+    }
+    
+    // Email is optional, but if filled must be valid
+    if (registerForm.email.trim()) {
+      const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRx.test(registerForm.email)) {
+        setRegisterErr("Enter a valid email address.");
+        return;
+      }
+    }
+    
+    // Aadhaar is optional, but if filled must be 12 digits
+    const aadhaar = registerForm.aadhaar_number.replace(/\D/g, "");
+    if (aadhaar && aadhaar.length !== 12) {
+      setRegisterErr("Enter a valid 12-digit Aadhaar number.");
+      return;
+    }
+
+    setRegisterBusy(true);
+    setRegisterErr("");
+    setRegisterSuccess(false);
+    try {
+      await api.post("/candidates/quick", {
+        full_name: registerForm.full_name.trim(),
+        phone,
+        email: registerForm.email.trim() || null,
+        aadhaar_last4: aadhaar ? aadhaar.slice(-4) : null,
+        primary_trade: registerForm.preferred_role || null,
+        field_drive_id: registerDriveId,
+      });
+      setRegisterSuccess(true);
+      setRegisterForm({
+        full_name: "",
+        phone: "",
+        email: "",
+        aadhaar_number: "",
+        preferred_role: "",
+      });
+      setTimeout(() => {
+        setShowRegisterModal(false);
+        setRegisterSuccess(false);
+      }, 1500);
+      await refresh();
+    } catch (e: any) {
+      setRegisterErr(e?.response?.data?.detail ?? "Could not save candidate");
+    } finally {
+      setRegisterBusy(false);
+    }
+  }
+
   async function removeDrive(d: FieldDrive) {
     if (!confirm(`Delete drive "${d.title}"? This cannot be undone.`)) return;
     await api.delete(`/field-drives/${d.id}`);
@@ -221,7 +311,7 @@ export default function FieldDriveBox() {
                 {d.status === "active" && (
                   <button
                     className="btn primary"
-                    onClick={() => navigate(`/candidates/new?driveId=${d.id}`)}
+                    onClick={() => openRegisterCandidate(d)}
                   >
                     + Register Candidate
                   </button>
@@ -378,6 +468,75 @@ export default function FieldDriveBox() {
             >
               💬 Share on WhatsApp
             </a>
+          </div>
+        </Modal>
+      )}
+
+      {showRegisterModal && (
+        <Modal title="Quick Register Candidate" onClose={() => setShowRegisterModal(false)}>
+          <div className="form-grid">
+            {registerErr && <div className="error-note" style={{ marginBottom: 12 }}>{registerErr}</div>}
+            {registerSuccess && (
+              <div className="success-note" style={{ marginBottom: 12 }}>
+                Candidate registered successfully!
+              </div>
+            )}
+            <div className="field">
+              <label>Full Name *</label>
+              <input
+                value={registerForm.full_name}
+                onChange={(e) => setRegisterForm(f => ({ ...f, full_name: e.target.value }))}
+                placeholder="As per Aadhaar"
+              />
+            </div>
+            <div className="field">
+              <label>Mobile Number *</label>
+              <input
+                value={registerForm.phone}
+                maxLength={10}
+                onChange={(e) => setRegisterForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, "") }))}
+                placeholder="10-digit mobile number"
+              />
+            </div>
+            <div className="field">
+              <label>Email Address</label>
+              <input
+                type="email"
+                value={registerForm.email}
+                onChange={(e) => setRegisterForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@example.com"
+              />
+            </div>
+            <div className="field">
+              <label>Aadhaar Number</label>
+              <input
+                value={registerForm.aadhaar_number}
+                maxLength={12}
+                onChange={(e) => setRegisterForm(f => ({ ...f, aadhaar_number: e.target.value.replace(/\D/g, "") }))}
+                placeholder="12-digit Aadhaar"
+              />
+              <span className="muted" style={{ fontSize: 11 }}>Only last 4 digits are stored.</span>
+            </div>
+            <div className="field">
+              <label>Preferred Job Role / Trade</label>
+              <input
+                list="role-options-box"
+                value={registerForm.preferred_role}
+                onChange={(e) => setRegisterForm(f => ({ ...f, preferred_role: e.target.value }))}
+                placeholder="Start typing…"
+              />
+              <datalist id="role-options-box">
+                {ref?.job_categories.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+            <div className="btn-row" style={{ marginTop: 12 }}>
+              <button className="btn primary" onClick={handleRegisterSubmit} disabled={registerBusy}>
+                {registerBusy ? "Saving…" : "Register"}
+              </button>
+              <button className="btn" onClick={() => setShowRegisterModal(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </Modal>
       )}

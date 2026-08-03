@@ -51,6 +51,7 @@ class CandidateUpdate(BaseModel):
     has_driving_license: Optional[bool] = None
     willing_to_relocate: Optional[bool] = None
     notes: Optional[str] = None
+    source: Optional[CandidateSource] = None
     status: Optional[CandidateStatus] = None
     profile_data: Optional[dict[str, Any]] = None
 
@@ -117,14 +118,13 @@ class StudentCentralOut(CandidateOut):
 class QuickCandidateCreate(BaseModel):
     """Minimal candidate record created by a field agent on the spot.
 
-    Name, Phone, Email, and Aadhaar are required. All other details
-    can be completed later through the full candidate form.
+    Only Name and Phone are required. All other details can be completed later.
     """
 
     full_name: str
     phone: str
-    email: str
-    aadhaar_last4: str
+    email: Optional[str] = None
+    aadhaar_last4: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     primary_trade: Optional[str] = None

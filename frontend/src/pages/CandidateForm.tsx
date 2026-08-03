@@ -139,6 +139,7 @@ interface FormState {
   emergency_phone: string;
 
   declaration_accepted: boolean;
+  source: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -151,6 +152,7 @@ const EMPTY_FORM: FormState = {
   date_of_birth: "",
   marital_status: "",
   father_or_husband_name: "",
+  source: "manual",
   state: "",
   district: "",
   city: "",
@@ -493,9 +495,11 @@ export default function CandidateForm() {
   function validateStep(idx: number): string | null {
     const s = SECTIONS[idx].key;
     if (s === "basic") {
-      if (!form.full_name.trim()) return "Full Name is required.";
+      if (!form.full_name.trim() || !form.phone.trim()) {
+        alert("mandatory fields should be filled");
+        return "mandatory fields should be filled";
+      }
       if (!/^\d{10}$/.test(form.phone)) return "Enter a valid 10-digit mobile number.";
-      if (isFieldAgent && !form.email.trim()) return "Email Address is required.";
     }
     if (s === "address") {
       if (!form.state) return "State is required.";
@@ -728,7 +732,7 @@ export default function CandidateForm() {
         has_driving_license: form.driving_license_available,
         willing_to_relocate: form.willing_to_relocate,
         notes: null,
-        source: user?.role === "field_agent" ? "field_agent" : "manual",
+        source: form.source || (user?.role === "field_agent" ? "field_agent" : "manual"),
         field_drive_id: driveId ? Number(driveId) : null,
         profile_data: {
           alt_phone: form.alt_phone,
@@ -805,13 +809,21 @@ export default function CandidateForm() {
 
   async function submitQuick() {
     const phone = form.phone.replace(/\D/g, "");
-    if (!form.full_name.trim()) return setError("Full Name is required.");
+    if (!form.full_name.trim() || !phone.trim()) {
+      alert("mandatory fields should be filled");
+      return setError("mandatory fields should be filled");
+    }
     if (!/^\d{10}$/.test(phone)) return setError("Enter a valid 10-digit mobile number.");
-    if (!form.email.trim()) return setError("Email Address is required.");
-    const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRx.test(form.email)) return setError("Enter a valid email address.");
+    
+    // Email is optional, but if filled must be valid
+    if (form.email.trim()) {
+      const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRx.test(form.email)) return setError("Enter a valid email address.");
+    }
+    
+    // Aadhaar is optional, but if filled must be 12 digits
     const aadhaar = form.aadhaar_number.replace(/\D/g, "");
-    if (aadhaar.length !== 12) return setError("Enter a valid 12-digit Aadhaar number.");
+    if (aadhaar && aadhaar.length !== 12) return setError("Enter a valid 12-digit Aadhaar number.");
 
     setBusy(true);
     setError("");
@@ -857,7 +869,7 @@ export default function CandidateForm() {
           <div className="card-head">Basic Details</div>
           <div className="card-body">
             <p className="muted">
-              Name, Mobile, Email, and Aadhaar are required. The full profile can be completed later.
+              Name and Mobile are required. The full profile can be completed later.
             </p>
             {error && <div className="error-note" style={{ marginBottom: 12 }}>{error}</div>}
             <div className="form-grid">
@@ -879,7 +891,7 @@ export default function CandidateForm() {
                 />
               </div>
               <div className="field">
-                <label>Email Address<span className="req">*</span></label>
+                <label>Email Address</label>
                 <input
                   type="email"
                   value={form.email}
@@ -888,7 +900,7 @@ export default function CandidateForm() {
                 />
               </div>
               <div className="field">
-                <label>Aadhaar Number<span className="req">*</span></label>
+                <label>Aadhaar Number</label>
                 <input
                   value={form.aadhaar_number}
                   maxLength={12}
@@ -1111,6 +1123,21 @@ export default function CandidateForm() {
                 value={form.father_or_husband_name}
                 onChange={(e) => set("father_or_husband_name", e.target.value)}
               />
+            </div>
+            <div className="field">
+              <label>Registration Source (Platform)</label>
+              <select
+                value={form.source}
+                onChange={(e) => set("source", e.target.value)}
+              >
+                <option value="manual">Manual Entry / Staffing Portal</option>
+                <option value="website">Website / Online Application</option>
+                <option value="social_media">Social Media / Campaign</option>
+                <option value="field_agent">Field Agent / Registration Drive</option>
+                <option value="qr_self_registration">QR Self Registration</option>
+                <option value="institution_upload">Institution Upload</option>
+                <option value="inbound_webhook">Inbound Webhook / Lead</option>
+              </select>
             </div>
           </div>
         )}

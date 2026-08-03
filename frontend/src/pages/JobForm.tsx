@@ -587,18 +587,17 @@ export default function JobForm() {
               </div>
 
               <div className="form-group">
-                <label>Documents Required (Multi-select)</label>
-                <div className="chip-grid">
-                  {KYC_DOCUMENT_TYPES.slice(0, 10).map((doc) => (
-                    <button
-                      key={doc}
-                      type="button"
-                      className={`chip ${form.documents_required.includes(doc) ? "active" : ""}`}
-                      onClick={() => toggleMultiSelect("documents_required", doc)}
-                    >
-                      {form.documents_required.includes(doc) ? "✓ " : ""}
+                <label>Documents Required</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px", marginTop: "8px" }}>
+                  {KYC_DOCUMENT_TYPES.map((doc) => (
+                    <label key={doc} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: "normal" }}>
+                      <input
+                        type="checkbox"
+                        checked={form.documents_required.includes(doc)}
+                        onChange={() => toggleMultiSelect("documents_required", doc)}
+                      />
                       {doc}
-                    </button>
+                    </label>
                   ))}
                 </div>
               </div>
