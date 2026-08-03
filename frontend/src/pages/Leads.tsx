@@ -97,7 +97,7 @@ export default function Leads() {
                   </div>
                   <div className="job-card-stat">
                     <div className="job-card-stat-value">{job.stats?.blocked_for_position ?? 0}</div>
-                    <div className="job-card-stat-label">Blocked</div>
+                    <div className="job-card-stat-label">Qualified</div>
                   </div>
                 </div>
                 <div className="job-card-actions">

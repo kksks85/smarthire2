@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.enums import ApplicationStatus, CandidatePoolStatus, CandidateSource
+from app.core.enums import ApplicationStatus, CandidatePoolStatus, CandidateSource, JobStatus
 from app.db.session import get_db
 from app.models.candidate import Candidate
 from app.models.field_drive import FieldDrive
@@ -11,6 +12,7 @@ from app.models.pipeline import Application
 from app.models.user import User
 from app.schemas.candidate import PublicRegistration
 from app.schemas.field_drive import PublicDriveInfo
+from app.api.v1.admin import get_public_base_url
 from app.services.inbound_leads import capture_candidate_registration
 
 router = APIRouter(prefix="/public", tags=["public"])
@@ -38,6 +40,47 @@ def public_job(slug: str, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/jobs/{slug}/share", response_class=HTMLResponse)
+def public_job_share(slug: str, db: Session = Depends(get_db)):
+    """SEO Proxy for social media scrapers (Facebook/LinkedIn) to get Open Graph tags."""
+    job = db.scalar(select(JobPosting).where(JobPosting.public_slug == slug))
+    if not job or job.status != "published":
+        return HTMLResponse("Job not found", status_code=404)
+
+    base = get_public_base_url(db)
+    target_url = f"{base}/careers/{slug}"
+    
+    title = f"{job.title} at SmartHire"
+    location = f"{job.work_city}, {job.work_state}" if job.work_city else "Remote"
+    salary = f"₹{job.salary_min}-₹{job.salary_max}/mo" if job.salary_min else "Competitive Salary"
+    
+    description = f"Join our team! Role: {job.title} | {location} | {salary} | Experience: {job.min_experience_years} yrs."
+    if job.description:
+        description += f" {job.description[:100]}..."
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>{title}</title>
+        <meta property="og:title" content="{title}" />
+        <meta property="og:description" content="{description}" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="{target_url}" />
+        <meta property="twitter:card" content="summary_large_image" />
+        <meta property="twitter:title" content="{title}" />
+        <meta property="twitter:description" content="{description}" />
+        <!-- Redirect real users to the actual job page -->
+        <meta http-equiv="refresh" content="0; url={target_url}">
+        <script>window.location.replace("{target_url}");</script>
+    </head>
+    <body>
+        <p>Redirecting to job details... <a href="{target_url}">Click here</a> if not redirected automatically.</p>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 @router.get("/drives/{slug}", response_model=PublicDriveInfo)
 def public_drive(slug: str, db: Session = Depends(get_db)):
     """Public field-drive details for the candidate self-registration page (no auth)."""

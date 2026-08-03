@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "../api/client";
 import { Badge, Modal, PageHead } from "../components/ui";
-import type { Application, Candidate, CandidatePii } from "../types";
+import type { Application, Candidate, CandidatePii, Job } from "../types";
 
 interface KycDocument {
   id: number;
@@ -23,6 +23,7 @@ export default function CandidateDetail() {
   const [questions, setQuestions] = useState<Record<number, string>>({});
   const [history, setHistory] = useState<Record<number, { contacts: Array<{ outcome: string; notes?: string | null; attempted_at: string }>; answers: Array<{ question_id: number; answer: string }>; evaluations: Array<{ stage_type: string; outcome: string; remarks?: string | null; evaluated_at?: string | null }> }>>({});
   const [documents, setDocuments] = useState<KycDocument[]>([]);
+  const [jobs, setJobs] = useState<Record<number, Job>>({});
 
   const load = useCallback(() => {
     api.get<Candidate>(`/candidates/${id}`).then((r) => setC(r.data));
@@ -34,9 +35,15 @@ export default function CandidateDetail() {
     Promise.all([
       api.get<Application[]>("/applications", { params: { candidate_id: id } }),
       api.get<Array<{ id: number; text: string }>>("/screening-questions"),
-    ]).then(async ([applicationResponse, questionResponse]) => {
+      api.get<Job[]>("/jobs"),
+    ]).then(async ([applicationResponse, questionResponse, jobResponse]) => {
       setApplications(applicationResponse.data);
       setQuestions(Object.fromEntries(questionResponse.data.map((question) => [question.id, question.text])));
+      
+      const jMap: Record<number, Job> = {};
+      jobResponse.data.forEach((j) => (jMap[j.id] = j));
+      setJobs(jMap);
+
       const entries = await Promise.all(applicationResponse.data.map(async (application) => {
         const [contacts, answers, evaluations] = await Promise.all([
           api.get(`/applications/${application.id}/contact-attempts`),
@@ -124,7 +131,7 @@ export default function CandidateDetail() {
             const item = history[application.id];
             return <div key={application.id} style={{ borderBottom: "1px solid #d9dee2", padding: "10px 0" }}>
               <div className="btn-row" style={{ justifyContent: "space-between" }}>
-                <strong>Application #{application.id}</strong>
+                <strong>Application #{application.id}{jobs[application.job_id] ? ` - ${jobs[application.job_id].title} (Job ID: ${application.job_id})` : ""}</strong>
                 <Badge value={application.status} />
               </div>
               <Progress application={application} />

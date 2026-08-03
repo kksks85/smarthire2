@@ -17,7 +17,7 @@ from app.models.audit import AgentLocationLog
 from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.models.kyc import KycDocument
-from app.models.org import InstitutionUploadLog
+from app.models.org import Institution, Employer, InstitutionUploadLog
 from app.models.pipeline import Application
 from app.models.user import User, Role
 from app.schemas.dashboard import DashboardOut, KpiCard
@@ -143,12 +143,12 @@ def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             ),
             KpiCard(
                 label="Institutions",
-                value=_count_users_by_role(db, RoleName.INSTITUTION),
+                value=_count(db, Institution),
                 link="/institutions",
             ),
             KpiCard(
                 label="Employers",
-                value=_count_users_by_role(db, RoleName.EMPLOYER),
+                value=_count(db, Employer),
                 link="/employers",
             ),
         ]

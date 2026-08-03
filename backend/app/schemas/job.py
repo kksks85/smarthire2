@@ -88,6 +88,12 @@ class JobUpdate(BaseModel):
     hiring_priority: Optional[str] = None
 
 
+class JobStats(BaseModel):
+    interested: int = 0
+    contact_successful: int = 0
+    blocked_for_position: int = 0
+
+
 class JobOut(JobBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -98,6 +104,7 @@ class JobOut(JobBase):
     created_by_id: int
     created_at: datetime
     updated_at: datetime
+    stats: Optional[JobStats] = None
 
 
 class ApprovalRequest(BaseModel):

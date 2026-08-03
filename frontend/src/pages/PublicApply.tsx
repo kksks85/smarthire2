@@ -42,13 +42,18 @@ export default function PublicApply() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await axios.post("/api/v1/public/register", {
-      ...form,
-      experience_years: Number(form.experience_years) || 0,
-      job_slug: slug,
-      registration_channel: searchParams.get("source") || "website",
-    });
-    setDone(true);
+    setErr("");
+    try {
+      await axios.post("/api/v1/public/register", {
+        ...form,
+        experience_years: Number(form.experience_years) || 0,
+        job_slug: slug,
+        registration_channel: searchParams.get("source") || "website",
+      });
+      setDone(true);
+    } catch (error: any) {
+      setErr(error?.response?.data?.detail ?? "Registration failed. Please verify your connection.");
+    }
   }
 
   return (

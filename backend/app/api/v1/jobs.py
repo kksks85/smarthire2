@@ -12,6 +12,7 @@ from app.core.enums import ApprovalDecision, JobStatus, RoleName
 from app.db.session import get_db
 from app.integrations.qr import generate_qr_data_uri
 from app.integrations.linkedin import linkedin_service
+from app.integrations.facebook import facebook_service
 from app.models.job import JobApproval, JobPosting
 from app.models.org import Employer
 from app.models.user import User
@@ -65,20 +66,45 @@ def list_jobs(
                 Application.job_id.in_(job_ids),
                 Application.status.in_([
                     ApplicationStatus.INTERESTED,
+                    ApplicationStatus.CONTACT_PENDING,
+                    ApplicationStatus.ASSIGNED,
+                    ApplicationStatus.CONTACT_ATTEMPTED,
                     ApplicationStatus.CONTACT_SUCCESSFUL,
+                    ApplicationStatus.SCREENING,
+                    ApplicationStatus.IN_INTERVIEW,
+                    ApplicationStatus.DOCUMENTS,
+                    ApplicationStatus.KYC,
+                    ApplicationStatus.VALIDATED,
+                    ApplicationStatus.SELECTED,
                     ApplicationStatus.BLOCKED_FOR_POSITION,
+                    ApplicationStatus.QUALIFIED,
+                    ApplicationStatus.PLACED,
                 ]),
             )
             .group_by(Application.job_id, Application.status)
         ).all()
         for job_id, app_status, count in rows:
-            bucket = {
-                ApplicationStatus.INTERESTED: "interested",
-                ApplicationStatus.CONTACT_SUCCESSFUL: "contact_successful",
-                ApplicationStatus.BLOCKED_FOR_POSITION: "blocked_for_position",
-            }.get(app_status)
-            if bucket:
-                counts[job_id][bucket] = count
+            if app_status in (
+                ApplicationStatus.INTERESTED,
+                ApplicationStatus.CONTACT_PENDING,
+                ApplicationStatus.ASSIGNED,
+                ApplicationStatus.CONTACT_ATTEMPTED,
+            ):
+                counts[job_id]["interested"] += count
+            elif app_status == ApplicationStatus.CONTACT_SUCCESSFUL:
+                counts[job_id]["contact_successful"] += count
+            elif app_status in (
+                ApplicationStatus.SCREENING,
+                ApplicationStatus.IN_INTERVIEW,
+                ApplicationStatus.DOCUMENTS,
+                ApplicationStatus.KYC,
+                ApplicationStatus.VALIDATED,
+                ApplicationStatus.SELECTED,
+                ApplicationStatus.BLOCKED_FOR_POSITION,
+                ApplicationStatus.QUALIFIED,
+                ApplicationStatus.PLACED,
+            ):
+                counts[job_id]["blocked_for_position"] += count
 
     result = []
     for job in jobs:
@@ -320,6 +346,63 @@ def post_job_to_linkedin(
         entity_type="JobPosting",
         entity_id=job_id,
         detail=f"LinkedIn post ID: {result.get('data', {}).get('id', '')}",
+    )
+    
+    return {
+        "success": True,
+        "message": result["message"],
+        "post_url": result.get("data", {}).get("id", "")
+    }
+
+
+@router.post("/{job_id}/post-facebook")
+def post_job_to_facebook(
+    job_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_CREATORS),
+):
+    """Post a published job to Facebook company page directly."""
+    job = db.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status != JobStatus.PUBLISHED:
+        raise HTTPException(status_code=400, detail="Job must be published to post on Facebook")
+    
+    if not facebook_service.is_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Facebook API not configured. Please set FACEBOOK_ACCESS_TOKEN and FACEBOOK_PAGE_ID in environment variables."
+        )
+    
+    # Get the public URL
+    base = get_public_base_url(db)
+    apply_url = f"{base}/apply/{job.public_slug}?source=facebook"
+    location = ", ".join(
+        part for part in (job.work_address, job.work_city, job.work_state) if part
+    ) or "Not specified"
+    
+    # Post to Facebook
+    result = facebook_service.post_job(
+        title=job.title,
+        description=job.description or "",
+        location=location,
+        job_url=apply_url,
+        salary_min=job.salary_min,
+        salary_max=job.salary_max,
+    )
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["message"])
+    
+    # Log the action
+    record_audit(
+        db=db,
+        user_id=user.id,
+        action="post_job_to_facebook",
+        entity_type="JobPosting",
+        entity_id=job_id,
+        detail=f"Facebook post ID: {result.get('data', {}).get('id', '')}",
     )
     
     return {

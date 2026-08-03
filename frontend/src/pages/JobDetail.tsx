@@ -60,6 +60,21 @@ export default function JobDetail() {
     }
   }
 
+  async function postToFacebook() {
+    if (!id) return;
+    setIsPosting(true);
+    setMsg("");
+    try {
+      await api.post(`/jobs/${id}/post-facebook`);
+      setMsg(`✅ Job posted to Facebook successfully! Check your company page.`);
+      setShowJobPreview(false);
+    } catch (error: any) {
+      setMsg(error?.response?.data?.detail ?? "Failed to post to Facebook. Please check your Facebook API configuration.");
+    } finally {
+      setIsPosting(false);
+    }
+  }
+
   if (!job) return <div className="muted">Loading…</div>;
 
   return (
@@ -291,14 +306,13 @@ export default function JobDetail() {
                 {isPosting ? "Posting..." : "Post to LinkedIn"}
               </button>
             ) : (
-              <a
+              <button
                 className="btn primary"
-                href={publish.share_facebook_url}
-                target="_blank"
-                rel="noreferrer"
+                onClick={postToFacebook}
+                disabled={isPosting}
               >
-                Post to Facebook
-              </a>
+                {isPosting ? "Posting..." : "Post to Facebook"}
+              </button>
             )}
           </div>
         </Modal>

@@ -195,6 +195,12 @@ def parse_institution_csv(content: bytes) -> tuple[list[dict[str, Any]], list[st
     return rows, errors
 
 
+def _normalize_campaign_header(name: str) -> str:
+    """Normalize campaign headers: lower case, strip spaces, collapse non-alphanumerics."""
+    text = "".join(ch for ch in name.lower().strip() if ch.isalnum() or ch.isspace())
+    return "".join(text.split())
+
+
 def parse_campaign_workbook(content: bytes) -> tuple[list[dict[str, Any]], list[str]]:
     """Parse the fixed five-question Facebook campaign workbook template."""
     wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
@@ -204,9 +210,39 @@ def parse_campaign_workbook(content: bytes) -> tuple[list[dict[str, Any]], list[
     if not header_cells:
         return [], ["Worksheet is empty."]
 
-    headers = [str(header).strip().lower() if header is not None else "" for header in header_cells]
-    header_positions = {header: index for index, header in enumerate(headers) if header}
-    missing_headers = [header.title() for header in CAMPAIGN_HEADERS if header not in header_positions]
+    headers = [str(header).strip() if header is not None else "" for header in header_cells]
+    normalized_headers = [_normalize_campaign_header(h) for h in headers]
+    
+    # Map header positions based on normalized keys or aliases
+    header_positions = {}
+    for index, nh in enumerate(normalized_headers):
+        if not nh:
+            continue
+        # Check name and phone aliases
+        if nh in ("name", "fullname", "studentname", "candidatename"):
+            header_positions["name"] = index
+        elif nh in ("phone", "mobile", "mobilenumber", "phonenumber", "phone_number"):
+            header_positions["phone"] = index
+        else:
+            # Check question/answer patterns (e.g. question1, q1, answer1, a1)
+            for number in range(1, 6):
+                if nh in (f"question{number}", f"q{number}"):
+                    header_positions[f"question {number}"] = index
+                elif nh in (f"answer{number}", f"a{number}"):
+                    header_positions[f"answer {number}"] = index
+
+    # Validate missing headers
+    missing_headers = []
+    if "name" not in header_positions:
+        missing_headers.append("Name")
+    if "phone" not in header_positions:
+        missing_headers.append("Phone")
+    for number in range(1, 6):
+        if f"question {number}" not in header_positions:
+            missing_headers.append(f"Question {number}")
+        if f"answer {number}" not in header_positions:
+            missing_headers.append(f"Answer {number}")
+
     if missing_headers:
         return [], [f"Missing required columns: {', '.join(missing_headers)}."]
 
@@ -216,18 +252,24 @@ def parse_campaign_workbook(content: bytes) -> tuple[list[dict[str, Any]], list[
             continue
 
         def cell(header: str) -> str | None:
-            value = raw[header_positions[header]] if header_positions[header] < len(raw) else None
-            return str(value).strip() if value is not None else None
+            pos = header_positions.get(header)
+            if pos is not None and pos < len(raw):
+                value = raw[pos]
+                return str(value).strip() if value is not None else None
+            return None
 
         full_name = cell("name")
         phone = cell("phone")
         if not full_name or not phone:
             errors.append(f"Row {row_number}: missing required Name or Phone - skipped.")
             continue
+            
+        cleaned_phone = "".join(ch for ch in phone if ch.isdigit())
+
         rows.append(
             {
                 "full_name": full_name,
-                "phone": phone,
+                "phone": cleaned_phone,
                 "responses": [
                     {
                         "question_number": number,

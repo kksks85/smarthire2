@@ -1,12 +1,30 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, List
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+def _find_env_files() -> tuple[str, ...]:
+    paths = []
+    # Check parent project root, cwd, and relative paths
+    candidates = [
+        Path(__file__).resolve().parents[3] / ".env",
+        Path(__file__).resolve().parents[2] / ".env",
+        Path.cwd() / ".env",
+        Path.cwd().parent / ".env",
+        Path(".env"),
+    ]
+    for c in candidates:
+        if c.is_file() and str(c) not in paths:
+            paths.append(str(c))
+    if not paths:
+        paths.append(".env")
+    return tuple(paths)
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=_find_env_files(), extra="ignore", case_sensitive=True)
 
     # App
     PROJECT_NAME: str = "SmartHire 2.0"
@@ -47,6 +65,10 @@ class Settings(BaseSettings):
     LINKEDIN_ACCESS_TOKEN: str = ""
     LINKEDIN_COMPANY_ID: str = ""
 
+    # Facebook API
+    FACEBOOK_ACCESS_TOKEN: str = ""
+    FACEBOOK_PAGE_ID: str = ""
+
     # Seed admin
     FIRST_ADMIN_EMAIL: str = "admin@smarthire.io"
     FIRST_ADMIN_PASSWORD: str = "Admin@12345"
@@ -76,8 +98,17 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_settings() -> Settings:
+def _get_cached_settings() -> Settings:
     return Settings()
+
+
+def get_settings() -> Settings:
+    s = _get_cached_settings()
+    # If cached settings missed social tokens because .env was populated after boot, recreate Settings
+    if not s.LINKEDIN_ACCESS_TOKEN or not s.FACEBOOK_ACCESS_TOKEN:
+        _get_cached_settings.cache_clear()
+        s = _get_cached_settings()
+    return s
 
 
 settings = get_settings()
