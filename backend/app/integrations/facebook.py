@@ -85,7 +85,7 @@ class FacebookService:
                     "message": job_content,
                     "access_token": self.access_token
                 }
-                if job_url and not any(host in job_url.lower() for host in ["localhost", "127.0.0.1", "0.0.0.0"]):
+                if job_url:
                     payload["link"] = job_url
 
                 response = requests.post(

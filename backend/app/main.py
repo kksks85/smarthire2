@@ -20,6 +20,21 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Manage app startup and shutdown events."""
     # Startup
+    # Run alembic upgrade head programmatically inside lifespan
+    try:
+        import os
+        from alembic.config import Config
+        from alembic import command
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        ini_path = os.path.join(base_dir, "alembic.ini")
+        logger.info(f"Running database migrations programmatically using {ini_path}")
+        alembic_cfg = Config(ini_path)
+        alembic_cfg.set_main_option("script_location", os.path.join(base_dir, "alembic"))
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Database migrations completed successfully")
+    except Exception as e:
+        logger.error(f"Failed to run database migrations programmatically: {e}")
+
     scheduler.add_job(
         cleanup_old_location_logs,
         "interval",

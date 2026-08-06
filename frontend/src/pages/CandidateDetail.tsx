@@ -69,13 +69,40 @@ export default function CandidateDetail() {
 
   if (!c) return <div className="muted">Loading…</div>;
 
+  const isAadhaarVerified = 
+    c.profile_data?.aadhaar_verified === true ||
+    documents.some((doc) => doc.document_type === "Aadhaar Card" && doc.status === "verified");
+
+  const isPanVerified = 
+    c.profile_data?.pan_verified === true ||
+    documents.some((doc) => doc.document_type === "PAN Card" && doc.status === "verified");
+
+  const isBankVerified = 
+    c.profile_data?.bank_verified === true ||
+    documents.some((doc) => doc.document_type === "Bank Passbook / Cancelled Cheque" && doc.status === "verified");
+
   return (
     <div>
       <PageHead
         title={c.full_name}
         breadcrumb="Candidate Data Bank › Candidate"
         actions={
-          <div className="btn-row">
+          <div className="btn-row" style={{ alignItems: "center" }}>
+            {isAadhaarVerified && (
+              <span className="badge" style={{ backgroundColor: "#e6f4ea", color: "#137333", border: "1px solid #137333", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <span>✅</span> Aadhaar Verified
+              </span>
+            )}
+            {isPanVerified && (
+              <span className="badge" style={{ backgroundColor: "#e6f4ea", color: "#137333", border: "1px solid #137333", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <span>✅</span> PAN Verified
+              </span>
+            )}
+            {isBankVerified && (
+              <span className="badge" style={{ backgroundColor: "#e6f4ea", color: "#137333", border: "1px solid #137333", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <span>✅</span> Bank Verified
+              </span>
+            )}
             <Badge value={c.status} />
             <Badge value={c.pool_status} />
             <button className="btn" onClick={reveal}>
@@ -110,6 +137,42 @@ export default function CandidateDetail() {
             <Item label="Phone (masked)" value={c.phone} mono />
             <Item label="Driving License" value={c.has_driving_license ? "Yes" : "No"} />
             <Item label="Relocate" value={c.willing_to_relocate ? "Yes" : "No"} />
+            <Item 
+              label="Aadhaar Status" 
+              value={
+                isAadhaarVerified ? (
+                  <span style={{ color: "#137333", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    ✅ Verified
+                  </span>
+                ) : (
+                  <span className="muted">Not Verified</span>
+                )
+              } 
+            />
+            <Item 
+              label="PAN Status" 
+              value={
+                isPanVerified ? (
+                  <span style={{ color: "#137333", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    ✅ Verified
+                  </span>
+                ) : (
+                  <span className="muted">Not Verified</span>
+                )
+              } 
+            />
+            <Item 
+              label="Bank Details Status" 
+              value={
+                isBankVerified ? (
+                  <span style={{ color: "#137333", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    ✅ Verified
+                  </span>
+                ) : (
+                  <span className="muted">Not Verified</span>
+                )
+              } 
+            />
           </div>
         </div>
       </div>
@@ -184,13 +247,13 @@ function Item({
   mono,
 }: {
   label: string;
-  value?: string | null;
+  value?: React.ReactNode;
   mono?: boolean;
 }) {
   return (
     <div className="field">
       <label>{label}</label>
-      <div className={mono ? "pii" : undefined}>{value || "—"}</div>
+      <div className={mono ? "pii" : undefined}>{value ?? "—"}</div>
     </div>
   );
 }

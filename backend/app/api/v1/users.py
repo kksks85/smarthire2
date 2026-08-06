@@ -49,6 +49,7 @@ def create_user(
         role_id=role.id,
         institution_id=body.institution_id,
         employer_id=body.employer_id,
+        recruiter_details=body.recruiter_details,
     )
     db.add(user)
     db.commit()
@@ -78,7 +79,10 @@ def update_user(
         if not role:
             raise HTTPException(status_code=400, detail="Invalid role")
         user.role_id = role.id
+    if body.recruiter_details is not None:
+        user.recruiter_details = body.recruiter_details
 
     db.commit()
     db.refresh(user)
     return UserOut.from_user(user)
+

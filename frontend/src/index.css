@@ -427,12 +427,13 @@ table.sn-table tr:nth-child(even):hover td { background: #f5fbfa; }
 .pipeline-table th { padding: 10px 14px; font-size: 11px; letter-spacing: 0.35px; text-transform: uppercase; }
 .pipeline-table tbody tr { height: 48px; }
 .pipeline-table td { height: 48px; max-height: 48px; padding: 7px 14px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pipeline-table th:nth-child(1) { width: 19%; }
-.pipeline-table th:nth-child(2) { width: 24%; }
-.pipeline-table th:nth-child(3) { width: 17%; }
+.pipeline-table th:nth-child(1) { width: 15%; }
+.pipeline-table th:nth-child(2) { width: 15%; }
+.pipeline-table th:nth-child(3) { width: 18%; }
 .pipeline-table th:nth-child(4) { width: 15%; }
-.pipeline-table th:nth-child(5) { width: 13%; }
-.pipeline-table th:nth-child(6) { width: 12%; }
+.pipeline-table th:nth-child(5) { width: 11%; }
+.pipeline-table th:nth-child(6) { width: 14%; }
+.pipeline-table th:nth-child(7) { width: 12%; }
 .pipeline-table .candidate-link { display: inline-block; padding: 0; font-weight: 700; line-height: 20px; max-width: 142px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; white-space: nowrap; }
 .pipeline-id { color: var(--text-muted); font-size: 11px; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .pipeline-job { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }

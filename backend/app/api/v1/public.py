@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -72,9 +72,14 @@ def public_job_share(slug: str, db: Session = Depends(get_db)):
         <meta property="og:description" content="{description}" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="{target_url}" />
+        <meta property="og:image" content="{base}/api/v1/public/jobs/{slug}/banner" />
+        <meta property="og:image:width" content="1080" />
+        <meta property="og:image:height" content="1350" />
+        <meta property="og:image:type" content="image/jpeg" />
         <meta property="twitter:card" content="summary_large_image" />
         <meta property="twitter:title" content="{title}" />
         <meta property="twitter:description" content="{description}" />
+        <meta property="twitter:image" content="{base}/api/v1/public/jobs/{slug}/banner" />
         <!-- Redirect real users to the actual job page -->
         <meta http-equiv="refresh" content="0; url={target_url}">
         <script>window.location.replace("{target_url}");</script>
@@ -85,6 +90,33 @@ def public_job_share(slug: str, db: Session = Depends(get_db)):
     </html>
     """
     return HTMLResponse(content=html_content)
+
+
+@router.get("/jobs/{slug}/banner")
+def public_job_banner(slug: str, db: Session = Depends(get_db)):
+    """Serves the generated job poster banner as a JPEG streaming response for scrapers."""
+    job = db.scalar(select(JobPosting).where(JobPosting.public_slug == slug))
+    if not job or job.status != "published":
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    from app.integrations.banner import generate_hiring_banner
+    location = ", ".join(
+        part for part in (job.work_address, job.work_city, job.work_state) if part
+    ) or "Not specified"
+
+    base = get_public_base_url(db)
+    apply_url = f"{base}/careers/{slug}"
+
+    banner_bytes = generate_hiring_banner(
+        title=job.title,
+        location=location,
+        salary_min=job.salary_min,
+        salary_max=job.salary_max,
+        apply_url=apply_url,
+    )
+
+    import io
+    return StreamingResponse(io.BytesIO(banner_bytes), media_type="image/jpeg")
 @router.get("/drives/{slug}", response_model=PublicDriveInfo)
 def public_drive(slug: str, db: Session = Depends(get_db)):
     """Public field-drive details for the candidate self-registration page (no auth)."""

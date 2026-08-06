@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import RoleName
@@ -40,3 +41,9 @@ class User(Base, TimestampMixin):
     employer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("employers.id"), nullable=True
     )
+
+    # Optional detailed profile for recruiter users
+    recruiter_details: Mapped[Optional[dict[str, any]]] = mapped_column(
+        JSONB, default=dict, nullable=True
+    )
+

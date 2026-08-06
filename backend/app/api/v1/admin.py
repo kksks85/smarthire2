@@ -31,7 +31,10 @@ class PublicSiteSettingsUpdate(BaseModel):
 
 def get_public_base_url(db: Session) -> str:
     configured = db.get(PublicSiteSettings, 1)
-    return (configured.public_base_url if configured else settings.PUBLIC_BASE_URL).rstrip("/")
+    val = (configured.public_base_url if configured else settings.PUBLIC_BASE_URL).strip().rstrip("/")
+    if not val.lower().startswith(("http://", "https://")):
+        val = f"https://{val}"
+    return val
 
 
 @router.get("/public-site", response_model=PublicSiteSettingsOut)

@@ -15,6 +15,7 @@ export interface User {
   role: Role;
   institution_id?: number | null;
   employer_id?: number | null;
+  recruiter_details?: Record<string, any> | null;
 }
 
 export interface KpiCard {

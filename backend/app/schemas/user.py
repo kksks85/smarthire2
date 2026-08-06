@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
@@ -9,6 +9,7 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str
     phone: Optional[str] = None
+    recruiter_details: Optional[Dict[str, Any]] = None
 
 
 class UserCreate(UserBase):
@@ -23,6 +24,7 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     is_active: Optional[bool] = None
     role: Optional[RoleName] = None
+    recruiter_details: Optional[Dict[str, Any]] = None
 
 
 class UserOut(UserBase):
@@ -45,4 +47,6 @@ class UserOut(UserBase):
             role=RoleName(user.role.name),
             institution_id=user.institution_id,
             employer_id=user.employer_id,
+            recruiter_details=user.recruiter_details,
         )
+

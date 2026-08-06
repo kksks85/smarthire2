@@ -289,6 +289,13 @@ export default function CandidateForm() {
           aadhaar_number: (data.profile_data?.documents?.aadhaar_number as string) ??
             data.aadhaar_last4 ??
             f.aadhaar_number,
+          aadhaar_verified: !!data.profile_data?.aadhaar_verified,
+          pan_number: (data.profile_data?.documents?.pan_number as string) ?? f.pan_number,
+          pan_verified: !!data.profile_data?.pan_verified,
+          bank_account_holder_name: (data.profile_data?.documents?.bank_account_holder_name as string) ?? f.bank_account_holder_name,
+          bank_account_number: (data.profile_data?.documents?.bank_account_number as string) ?? f.bank_account_number,
+          bank_ifsc_code: (data.profile_data?.documents?.bank_ifsc_code as string) ?? f.bank_ifsc_code,
+          bank_verified: !!data.profile_data?.bank_verified,
         }));
       } catch {
         /* silent — fall back to draft / empty form */
@@ -735,6 +742,9 @@ export default function CandidateForm() {
         source: form.source || (user?.role === "field_agent" ? "field_agent" : "manual"),
         field_drive_id: driveId ? Number(driveId) : null,
         profile_data: {
+          aadhaar_verified: form.aadhaar_verified,
+          pan_verified: form.pan_verified,
+          bank_verified: form.bank_verified,
           alt_phone: form.alt_phone,
           marital_status: form.marital_status,
           father_or_husband_name: form.father_or_husband_name,
@@ -765,6 +775,9 @@ export default function CandidateForm() {
             passport_available: form.passport_available,
             resume_file_name: form.resume_file_name,
             has_photo: !!form.photo_data_url,
+            bank_account_number: form.bank_account_number,
+            bank_ifsc_code: form.bank_ifsc_code,
+            bank_account_holder_name: form.bank_account_holder_name,
           },
           languages_known: form.languages_known,
           additional_info: {
@@ -785,7 +798,11 @@ export default function CandidateForm() {
         },
       };
 
-      await api.post("/candidates", payload);
+      if (candidateId) {
+        await api.patch(`/candidates/${candidateId}`, payload);
+      } else {
+        await api.post("/candidates", payload);
+      }
 
       localStorage.removeItem(STORAGE_KEY);
       navigate("/candidates");
