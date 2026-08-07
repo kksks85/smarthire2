@@ -1,11 +1,12 @@
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.crypto import encrypt_secret
 from app.core.deps import require_roles
 from app.core.enums import RoleName
 from app.db.session import get_db
@@ -13,6 +14,8 @@ from app.models.audit import AuditLog, PiiAccessLog
 from app.models.candidate import Candidate
 from app.models.public_site import PublicSiteSettings
 from app.models.user import User
+from app.models.whatsapp import WhatsAppSettings
+from app.services.audit import record_audit
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -27,6 +30,24 @@ class PublicSiteSettingsOut(BaseModel):
 
 class PublicSiteSettingsUpdate(BaseModel):
     public_base_url: HttpUrl
+
+
+class WhatsAppSettingsOut(BaseModel):
+    is_enabled: bool
+    phone_number_id: str | None = None
+    graph_api_version: str
+    template_name: str | None = None
+    template_language: str
+    has_access_token: bool
+
+
+class WhatsAppSettingsUpdate(BaseModel):
+    is_enabled: bool
+    phone_number_id: str | None = Field(default=None, max_length=128)
+    graph_api_version: str = Field(default="v21.0", pattern=r"^v\d+\.\d+$")
+    template_name: str | None = Field(default=None, max_length=512)
+    template_language: str = Field(default="en", max_length=32)
+    access_token: str | None = Field(default=None, min_length=1)
 
 
 def get_public_base_url(db: Session) -> str:
@@ -70,6 +91,64 @@ def update_public_site_settings(
         public_base_url=public_base_url,
         using_environment_default=False,
     )
+
+
+def _whatsapp_settings_out(configured: WhatsAppSettings | None) -> WhatsAppSettingsOut:
+    return WhatsAppSettingsOut(
+        is_enabled=bool(configured and configured.is_enabled),
+        phone_number_id=configured.phone_number_id if configured else None,
+        graph_api_version=(configured.graph_api_version if configured and configured.graph_api_version else "v21.0"),
+        template_name=configured.template_name if configured else None,
+        template_language=(configured.template_language if configured and configured.template_language else "en"),
+        has_access_token=bool(configured and configured.access_token_enc),
+    )
+
+
+@router.get("/whatsapp-settings", response_model=WhatsAppSettingsOut)
+def get_whatsapp_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(_ADMIN),
+):
+    return _whatsapp_settings_out(db.get(WhatsAppSettings, 1))
+
+
+@router.put("/whatsapp-settings", response_model=WhatsAppSettingsOut)
+def update_whatsapp_settings(
+    body: WhatsAppSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_ADMIN),
+):
+    configured = db.get(WhatsAppSettings, 1)
+    if not configured:
+        configured = WhatsAppSettings(id=1)
+        db.add(configured)
+
+    configured.is_enabled = body.is_enabled
+    configured.phone_number_id = body.phone_number_id.strip() if body.phone_number_id else None
+    configured.graph_api_version = body.graph_api_version
+    configured.template_name = body.template_name.strip() if body.template_name else None
+    configured.template_language = body.template_language.strip()
+    if body.access_token:
+        configured.access_token_enc = encrypt_secret(body.access_token.strip())
+
+    if configured.is_enabled and not (
+        configured.phone_number_id and configured.template_name and configured.access_token_enc
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Phone number ID, template name, and access token are required when WhatsApp is enabled.",
+        )
+
+    db.commit()
+    record_audit(
+        db,
+        user_id=current_user.id,
+        action="whatsapp.settings.update",
+        entity_type="whatsapp_settings",
+        entity_id=1,
+        detail=f"enabled={configured.is_enabled}",
+    )
+    return _whatsapp_settings_out(configured)
 
 
 @router.get("/audit-logs")

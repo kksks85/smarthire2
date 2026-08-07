@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
+import qrcode
 
 
 def generate_hiring_banner(
@@ -137,6 +138,13 @@ def generate_hiring_banner(
     cta_rect = [45, 1150, 1035, 1265]
     draw.rounded_rectangle(cta_rect, radius=26, fill=(5, 150, 105))
     draw.text((395, 1178), "APPLY NOW", fill=(255, 255, 255), font=font_cta, stroke_width=2, stroke_fill=(255, 255, 255))
+
+    if apply_url:
+        qr = qrcode.make(apply_url).convert("RGB")
+        qr.thumbnail((100, 100))
+        qr_frame = Image.new("RGB", (110, 110), "white")
+        qr_frame.paste(qr, ((110 - qr.width) // 2, (110 - qr.height) // 2))
+        img.paste(qr_frame, (60, 1153))
 
     # 5. Bottom Footer Text
     draw.text((200, 1285), "Click apply link in description or scan QR code to register", fill=(100, 116, 139), font=font_footer, stroke_width=1, stroke_fill=(100, 116, 139))

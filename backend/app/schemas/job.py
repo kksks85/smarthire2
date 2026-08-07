@@ -131,3 +131,26 @@ class PublishOut(BaseModel):
     qr_data_uri: str
     share_facebook_url: str
     share_linkedin_url: str
+    share_whatsapp_url: str
+
+
+class WhatsAppCampaignPreview(BaseModel):
+    eligible_count: int
+    whatsapp_configured: bool
+
+
+class WhatsAppCampaignCreate(BaseModel):
+    confirm: bool
+
+
+class WhatsAppCampaignOut(BaseModel):
+    id: int
+    status: str
+    recipient_count: int
+    sent_count: int
+    failed_count: int
+
+
+class WhatsAppTestSendOut(BaseModel):
+    recipient_phone: str
+    provider_message_id: str

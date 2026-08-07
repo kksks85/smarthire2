@@ -24,6 +24,7 @@ from app.models.pipeline import (
 from app.models.public_site import PublicSiteSettings
 from app.models.report import Report, ReportSchedule, ReportShare
 from app.models.user import Role, User
+from app.models.whatsapp import WhatsAppCampaign, WhatsAppCampaignRecipient, WhatsAppSettings
 
 __all__ = [
     "AgentLocationLog",
@@ -51,6 +52,9 @@ __all__ = [
     "ScreeningResponse",
     "StageEvaluation",
     "PublicSiteSettings",
+    "WhatsAppCampaign",
+    "WhatsAppCampaignRecipient",
+    "WhatsAppSettings",
     "Report",
     "ReportSchedule",
     "ReportShare",

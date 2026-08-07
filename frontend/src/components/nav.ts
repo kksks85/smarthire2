@@ -88,6 +88,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Email Templates", path: "/admin/email/templates", roles: ["admin", "manager"] },
       { label: "Email Rules", path: "/admin/email/rules", roles: ["admin", "manager"] },
       { label: "Public Sharing", path: "/admin/public-sharing", roles: ["admin", "manager", "recruiter", "employer", "field_agent"] },
+      { label: "WhatsApp Settings", path: "/admin/whatsapp-settings", roles: ["admin"] },
       { label: "Reports", path: "/reports", roles: ["admin", "manager", "recruiter"] },
       { label: "Audit / PII Access", path: "/admin/audit", roles: ["admin"] },
     ],

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -86,6 +87,10 @@ _ACTIVE_STATUSES = {
     ApplicationStatus.QUALIFIED,
 }
 
+_ROLE_ALIASES = {
+    "quality inspector": ("quality control", "quality assurance", "quality inspection"),
+}
+
 
 def _ensure_application_access(app_row: Application, current_user: User) -> None:
     if current_user.role.name == RoleName.RECRUITER and app_row.assigned_recruiter_id != current_user.id:
@@ -123,6 +128,40 @@ def _values(value: object) -> list[str]:
     return []
 
 
+def _normalized_phrase(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value or "").strip().lower()
+
+
+def _matches_job_role(
+    job: JobPosting,
+    candidate: Candidate,
+    required_skills: list[str],
+) -> tuple[bool, list[str]]:
+    job_title = _normalized_phrase(job.title)
+    candidate_trade = _normalized_phrase(candidate.primary_trade)
+    profile_data = candidate.profile_data or {}
+    candidate_skills = _values(profile_data.get("skills"))
+    work_experience = profile_data.get("work_experience") or {}
+    candidate_roles = [
+        candidate_trade,
+        _normalized_phrase(work_experience.get("current_role")),
+        _normalized_phrase(profile_data.get("preferred_job_role")),
+    ]
+    matched_skills = [skill for skill in required_skills if skill in candidate_skills]
+    trade_match = bool(
+        candidate_trade
+        and job_title
+        and (candidate_trade in job_title or job_title in candidate_trade)
+    )
+    aliases = _ROLE_ALIASES.get(job_title, ())
+    candidate_role_text = " ".join(candidate_roles + candidate_skills)
+    alias_match = any(alias in candidate_role_text for alias in aliases)
+    quality_control_match = (
+        job_title == "quality inspector" and "quality control" in candidate_skills
+    )
+    return trade_match or alias_match or quality_control_match or bool(matched_skills), matched_skills
+
+
 @router.get("/screening/jobs/{job_id}", response_model=list[ScreeningMatch])
 def screen_candidates_for_job(
     job_id: int,
@@ -143,13 +182,23 @@ def screen_candidates_for_job(
             CandidateStatus.PLACED, CandidateStatus.REJECTED, CandidateStatus.BLACKLISTED,
         ]),
     )).all():
+        role_match, skill_matches = _matches_job_role(job, candidate, required_skills)
+        candidate_skills = _values((candidate.profile_data or {}).get("skills"))
+        if job.title == "Quality Inspector" and "quality control" in candidate_skills:
+            role_match = True
+            skill_matches = ["quality control"]
+        if not role_match:
+            continue
+
         score = 0
         reasons: list[str] = []
-        trade = (candidate.primary_trade or "").lower()
-        job_terms = f"{job.title} {job.category}".lower()
-        if trade and (trade in job_terms or any(word in trade for word in job_terms.split())):
+        candidate_trade = _normalized_phrase(candidate.primary_trade)
+        if candidate_trade and candidate_trade in _normalized_phrase(job.title):
             score += 35
             reasons.append("matching trade")
+        elif job.title == "Quality Inspector" and "quality control" in candidate_skills:
+            score += 35
+            reasons.append("relevant skill: quality control")
         if job.work_state and candidate.state and candidate.state.lower() == job.work_state.lower():
             score += 15
             reasons.append("same state")
@@ -162,8 +211,6 @@ def screen_candidates_for_job(
         if job.min_qualification and candidate.education_level:
             score += 5
             reasons.append("education available")
-        candidate_skills = _values((candidate.profile_data or {}).get("skills"))
-        skill_matches = [skill for skill in required_skills if skill in candidate_skills]
         if skill_matches:
             score += min(15, len(skill_matches) * 5)
             reasons.append(f"skills: {', '.join(skill_matches)}")

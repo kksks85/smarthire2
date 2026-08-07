@@ -8,10 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.enums import CandidateSource, CandidateStatus, RoleName, StageType
+from app.core.enums import CandidateSource, CandidateStatus, JobStatus, RoleName, StageType
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.candidate import Candidate
+from app.models.job import JobPosting
 from app.models.org import Employer, Institution
 from app.models.pipeline import InterviewStageConfig, ScreeningQuestion
 from app.models.user import Role, User
@@ -120,6 +121,19 @@ CITIES_BY_STATE = {
 EDUCATION_LEVELS = ["10th Pass", "12th Pass", "ITI", "Diploma", "Graduate"]
 EXPERIENCE_BUCKETS = ["Fresher", "Less than 1 Year", "1–3 Years", "3–5 Years", "5+ Years"]
 LANGUAGES = ["Hindi", "English", "Marathi", "Gujarati", "Tamil", "Telugu", "Kannada", "Malayalam"]
+
+DRAFT_JOBS = [
+    ("Warehouse Associate", "Logistics", "Bhiwandi", 20, 14000, 18000),
+    ("Forklift Operator", "Logistics", "Pune", 8, 18000, 24000),
+    ("Delivery Executive", "Logistics", "Mumbai", 25, 15000, 22000),
+    ("CNC Machine Operator", "Manufacturing", "Pune", 6, 22000, 30000),
+    ("MIG Welder", "Manufacturing", "Nashik", 10, 20000, 28000),
+    ("Industrial Electrician", "Electrical", "Thane", 7, 22000, 32000),
+    ("Quality Inspector", "Manufacturing", "Chennai", 5, 24000, 34000),
+    ("Security Guard", "Security", "Bangalore", 18, 13000, 17000),
+    ("Housekeeping Associate", "Facilities", "Hyderabad", 15, 12000, 16000),
+    ("Production Line Worker", "Manufacturing", "Ahmedabad", 30, 14000, 19000),
+]
 
 
 def generate_candidates(db: Session, institution_id: int, count: int = 500) -> None:
@@ -256,6 +270,56 @@ def generate_candidates(db: Session, institution_id: int, count: int = 500) -> N
     logger.info(f"Seeded {len(candidates_to_add)} candidates with rich profiles.")
 
 
+def generate_draft_jobs(db: Session, employer: Employer, admin: User) -> None:
+    """Create the standard draft job postings once for local demo data."""
+    existing_titles = set(
+        db.scalars(
+            select(JobPosting.title).where(JobPosting.employer_id == employer.id)
+        ).all()
+    )
+    jobs_to_add = []
+
+    for title, category, city, vacancies, salary_min, salary_max in DRAFT_JOBS:
+        if title in existing_titles:
+            continue
+        jobs_to_add.append(
+            JobPosting(
+                title=title,
+                category=category,
+                description=f"Draft requirement for {title} at {employer.company_name}.",
+                industry=employer.industry,
+                employer_id=employer.id,
+                employment_type="Full Time",
+                shift_type="Day",
+                weekly_off="Sunday",
+                vacancies=vacancies,
+                salary_min=salary_min,
+                salary_max=salary_max,
+                work_address=f"{city} industrial area",
+                work_city=city,
+                work_state="Maharashtra",
+                min_experience_years=1,
+                min_age=18,
+                max_age=45,
+                min_qualification="10th Pass",
+                required_skills={"skills": [category]},
+                languages_required={"languages": ["Hindi"]},
+                benefits={"items": ["PF", "ESI"]},
+                documents_required={"documents": ["Aadhaar", "PAN"]},
+                required_candidate_fields=employer.required_candidate_fields or {},
+                joining_timeline="Within 15 days",
+                interview_mode="In person",
+                hiring_priority="Medium",
+                status=JobStatus.DRAFT,
+                created_by_id=admin.id,
+            )
+        )
+
+    if jobs_to_add:
+        db.add_all(jobs_to_add)
+        logger.info("Seeded %s draft job postings.", len(jobs_to_add))
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
@@ -272,14 +336,14 @@ def seed() -> None:
         # Admin user
         admin = db.scalar(select(User).where(User.email == settings.FIRST_ADMIN_EMAIL))
         if not admin:
-            db.add(
-                User(
-                    email=settings.FIRST_ADMIN_EMAIL,
-                    full_name=settings.FIRST_ADMIN_NAME,
-                    hashed_password=hash_password(settings.FIRST_ADMIN_PASSWORD),
-                    role_id=role_map[RoleName.ADMIN].id,
-                )
+            admin = User(
+                email=settings.FIRST_ADMIN_EMAIL,
+                full_name=settings.FIRST_ADMIN_NAME,
+                hashed_password=hash_password(settings.FIRST_ADMIN_PASSWORD),
+                role_id=role_map[RoleName.ADMIN].id,
             )
+            db.add(admin)
+            db.flush()
             logger.info("Seeded admin user %s", settings.FIRST_ADMIN_EMAIL)
 
         # Demo institution & employer to link partner-role users to.
@@ -338,6 +402,9 @@ def seed() -> None:
 
         # Seed 500+ rich candidate profiles
         generate_candidates(db, institution.id, count=520)
+
+        # Seed ten draft postings for the Job Postings view.
+        generate_draft_jobs(db, employer, admin)
 
         db.commit()
         logger.info("Seed complete.")

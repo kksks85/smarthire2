@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Badge, Modal, PageHead } from "../components/ui";
-import type { Job, PublishInfo } from "../types";
+import type { Job, PublishInfo, WhatsAppCampaign, WhatsAppCampaignPreview } from "../types";
 
 export default function JobDetail() {
   const { id } = useParams();
@@ -16,6 +16,9 @@ export default function JobDetail() {
   const [comments, setComments] = useState("");
   const [msg, setMsg] = useState("");
   const [isPosting, setIsPosting] = useState(false);
+  const [whatsAppPreview, setWhatsAppPreview] = useState<WhatsAppCampaignPreview | null>(null);
+  const [isQueuingWhatsApp, setIsQueuingWhatsApp] = useState(false);
+  const [isSendingWhatsAppTest, setIsSendingWhatsAppTest] = useState(false);
 
   const load = useCallback(() => {
     api.get<Job>(`/jobs/${id}`).then((r) => setJob(r.data));
@@ -38,6 +41,46 @@ export default function JobDetail() {
     const { data } = await api.post<PublishInfo>(`/jobs/${id}/publish`);
     setPublish(data);
     load();
+  }
+
+  async function previewWhatsAppCampaign() {
+    if (!id) return;
+    setMsg("");
+    try {
+      const { data } = await api.get<WhatsAppCampaignPreview>(`/jobs/${id}/whatsapp-campaign-preview`);
+      setWhatsAppPreview(data);
+    } catch (error: any) {
+      setMsg(error?.response?.data?.detail || "Unable to prepare WhatsApp campaign.");
+    }
+  }
+
+  async function queueWhatsAppCampaign() {
+    if (!id) return;
+    setIsQueuingWhatsApp(true);
+    try {
+      const { data } = await api.post<WhatsAppCampaign>(`/jobs/${id}/whatsapp-campaigns`, { confirm: true });
+      setWhatsAppPreview(null);
+      setPublish(null);
+      setMsg(`WhatsApp campaign queued for ${data.recipient_count} matching available candidates.`);
+    } catch (error: any) {
+      setMsg(error?.response?.data?.detail || "Unable to queue WhatsApp campaign.");
+    } finally {
+      setIsQueuingWhatsApp(false);
+    }
+  }
+
+  async function sendWhatsAppTest() {
+    if (!id) return;
+    setIsSendingWhatsAppTest(true);
+    setMsg("");
+    try {
+      const { data } = await api.post<{ recipient_phone: string }>(`/jobs/${id}/whatsapp-test-send`);
+      setMsg(`WhatsApp test message with QR sent to ${data.recipient_phone}.`);
+    } catch (error: any) {
+      setMsg(error?.response?.data?.detail || "Unable to send WhatsApp test message.");
+    } finally {
+      setIsSendingWhatsAppTest(false);
+    }
   }
 
   function copy(text: string) {
@@ -223,7 +266,32 @@ export default function JobDetail() {
             >
               Share on LinkedIn
             </button>
+            <button className="btn primary" onClick={sendWhatsAppTest} disabled={isSendingWhatsAppTest}>
+              {isSendingWhatsAppTest ? "Sending test..." : "Share on WhatsApp"}
+            </button>
+            <button className="btn" onClick={previewWhatsAppCampaign}>
+              Send to matching candidates
+            </button>
           </div>
+        </Modal>
+      )}
+
+      {whatsAppPreview && (
+        <Modal title="Send WhatsApp Campaign" onClose={() => setWhatsAppPreview(null)}>
+          {!whatsAppPreview.whatsapp_configured ? (
+            <div className="error-note">WhatsApp is not configured. An administrator must complete WhatsApp Settings before sending.</div>
+          ) : (
+            <>
+              <p>{whatsAppPreview.eligible_count} available candidates match this job using trade, location, experience, and skill scoring.</p>
+              <p className="muted">The approved WhatsApp template will include the job poster with QR code and the application link.</p>
+              <div className="btn-row">
+                <button className="btn primary" disabled={!whatsAppPreview.eligible_count || isQueuingWhatsApp} onClick={queueWhatsAppCampaign}>
+                  {isQueuingWhatsApp ? "Queuing..." : `Send to ${whatsAppPreview.eligible_count} candidates`}
+                </button>
+                <button className="btn" onClick={() => setWhatsAppPreview(null)}>Cancel</button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
 

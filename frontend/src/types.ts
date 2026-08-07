@@ -136,6 +136,20 @@ export interface PublishInfo {
   qr_data_uri: string;
   share_facebook_url: string;
   share_linkedin_url: string;
+  share_whatsapp_url: string;
+}
+
+export interface WhatsAppCampaignPreview {
+  eligible_count: number;
+  whatsapp_configured: boolean;
+}
+
+export interface WhatsAppCampaign {
+  id: number;
+  status: string;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
 }
 
 export interface Employer {

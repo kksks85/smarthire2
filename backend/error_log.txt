@@ -58,3 +58,14 @@ Registering upload with payload: {'registerUploadRequest': {'recipes': ['urn:li:
 Register upload status=200, response={"value":{"mediaArtifact":"urn:li:digitalmediaMediaArtifact:(urn:li:digitalmediaAsset:D4D22AQG5FLrU-KnwJw,urn:li:digitalmediaMediaArtifactClass:uploaded-image)","uploadMechanism":{"com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest":{"uploadUrl":"https://www.linkedin.com/dms-uploads/sp/v2/D4D22AQG5FLrU-KnwJw/uploaded-image/B4DZ_MKg9ZJAAE-/0?ca=vector_feedshare&cn=uploads&iri=B01-77&sync=0&v=beta&ut=2CGlj_J3RFaso1","headers":{"media-type-family":"STILLIMAGE"}}},"asset":"urn:li:digitalmediaAsset:D4D22AQG5FLrU-KnwJw","assetRealTimeTopic":"urn:li-realtime:digitalmediaAssetUpdatesTopic:urn:li:digitalmediaAsset:D4D22AQG5FLrU-KnwJw"}}
 Uploading image to: https://www.linkedin.com/dms-uploads/sp/v2/D4D22AQG5FLrU-Knw...
 Upload image status=201
+post_job starting for title=Quality Inspector
+Banner generated, size=132971
+Registering upload with payload: {'registerUploadRequest': {'recipes': ['urn:li:digitalmediaRecipe:feedshare-image'], 'owner': 'urn:li:organization:135096713', 'serviceRelationships': [{'relationshipType': 'OWNER', 'identifier': 'urn:li:userGeneratedContent'}]}}
+Register upload status=401, response={"status":401,"serviceErrorCode":65601,"code":"REVOKED_ACCESS_TOKEN","message":"The token used in the request has been revoked by the user"}
+Registration request failed with status=401
+post_job starting for title=Quality Inspector
+Banner generated, size=132971
+Registering upload with payload: {'registerUploadRequest': {'recipes': ['urn:li:digitalmediaRecipe:feedshare-image'], 'owner': 'urn:li:organization:135096713', 'serviceRelationships': [{'relationshipType': 'OWNER', 'identifier': 'urn:li:userGeneratedContent'}]}}
+Register upload status=200, response={"value":{"mediaArtifact":"urn:li:digitalmediaMediaArtifact:(urn:li:digitalmediaAsset:D4D22AQGIYYhFHUs-bQ,urn:li:digitalmediaMediaArtifactClass:uploaded-image)","uploadMechanism":{"com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest":{"uploadUrl":"https://www.linkedin.com/dms-uploads/sp/v2/D4D22AQGIYYhFHUs-bQ/uploaded-image/B4DZ_WFL8HI8AA-/0?ca=vector_feedshare&cn=uploads&iri=B01-77&sync=0&v=beta&ut=1aJbQ3DP4-dco1","headers":{"media-type-family":"STILLIMAGE"}}},"asset":"urn:li:digitalmediaAsset:D4D22AQGIYYhFHUs-bQ","assetRealTimeTopic":"urn:li-realtime:digitalmediaAssetUpdatesTopic:urn:li:digitalmediaAsset:D4D22AQGIYYhFHUs-bQ"}}
+Uploading image to: https://www.linkedin.com/dms-uploads/sp/v2/D4D22AQGIYYhFHUs-...
+Upload image status=201

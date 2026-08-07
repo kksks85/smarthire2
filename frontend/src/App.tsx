@@ -29,6 +29,7 @@ import EmailAccounts from "./pages/admin/EmailAccounts";
 import EmailTemplates from "./pages/admin/EmailTemplates";
 import EmailRules from "./pages/admin/EmailRules";
 import PublicSharing from "./pages/admin/PublicSharing";
+import WhatsAppSettings from "./pages/admin/WhatsAppSettings";
 import Mailbox from "./pages/Mailbox";
 import ReportsList from "./pages/reports/ReportsList";
 import ReportBuilder from "./pages/reports/ReportBuilder";
@@ -92,6 +93,7 @@ export default function App() {
         <Route path="/admin/email/templates" element={<EmailTemplates />} />
         <Route path="/admin/email/rules" element={<EmailRules />} />
         <Route path="/admin/public-sharing" element={<PublicSharing />} />
+        <Route path="/admin/whatsapp-settings" element={<WhatsAppSettings />} />
         <Route path="/mailbox" element={<Mailbox />} />
         <Route path="/reports" element={<ReportsList />} />
         <Route path="/reports/new" element={<ReportBuilder />} />

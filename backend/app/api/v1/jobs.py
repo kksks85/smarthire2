@@ -11,11 +11,15 @@ from app.core.deps import require_roles
 from app.core.enums import ApprovalDecision, JobStatus, RoleName
 from app.db.session import get_db
 from app.integrations.qr import generate_qr_data_uri
+from app.integrations.banner import generate_hiring_banner
 from app.integrations.linkedin import linkedin_service
 from app.integrations.facebook import facebook_service
+from app.integrations.whatsapp import whatsapp_service
+from app.models.candidate import Candidate
 from app.models.job import JobApproval, JobPosting
 from app.models.org import Employer
 from app.models.user import User
+from app.models.whatsapp import WhatsAppCampaign, WhatsAppCampaignRecipient, WhatsAppSettings
 from app.schemas.job import (
     ApprovalOut,
     ApprovalRequest,
@@ -23,9 +27,14 @@ from app.schemas.job import (
     JobOut,
     JobUpdate,
     PublishOut,
+    WhatsAppCampaignCreate,
+    WhatsAppCampaignOut,
+    WhatsAppCampaignPreview,
+    WhatsAppTestSendOut,
 )
 from app.schemas.pipeline import AssignRecruiter
 from app.services.audit import record_audit
+from app.services.whatsapp_campaigns import is_available_for_campaign, match_score
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -285,6 +294,11 @@ def publish_job(
     base = get_public_base_url(db)
     public_url = f"{base}/careers/{job.public_slug}"
     apply_url = f"{base}/apply/{job.public_slug}?source=website"
+    whatsapp_message = (
+        f"We are hiring: {job.title}\n"
+        f"Location: {', '.join(part for part in (job.work_city, job.work_state) if part) or 'Not specified'}\n"
+        f"Apply here: {base}/apply/{job.public_slug}?source=whatsapp"
+    )
     return PublishOut(
         id=job.id,
         status=job.status,
@@ -294,6 +308,168 @@ def publish_job(
         qr_data_uri=generate_qr_data_uri(apply_url),
         share_facebook_url=f"https://www.facebook.com/sharer/sharer.php?u={quote(f'{base}/apply/{job.public_slug}?source=facebook')}",
         share_linkedin_url=f"https://www.linkedin.com/sharing/share-offsite/?url={quote(f'{base}/apply/{job.public_slug}?source=linkedin')}",
+        share_whatsapp_url=f"https://wa.me/?text={quote(whatsapp_message)}",
+    )
+
+
+def _whatsapp_candidates(job: JobPosting, db: Session) -> list[tuple[Candidate, int]]:
+    matches: list[tuple[Candidate, int]] = []
+    for candidate in db.scalars(select(Candidate)).all():
+        if not is_available_for_campaign(candidate):
+            continue
+        score = match_score(job, candidate)
+        if score > 0:
+            matches.append((candidate, score))
+    return matches
+
+
+@router.post("/{job_id}/whatsapp-test-send", response_model=WhatsAppTestSendOut)
+def send_whatsapp_test_message(
+    job_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_APPROVERS),
+):
+    """Send one QR-bearing job share to the fixed development test recipient."""
+    job = db.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.PUBLISHED:
+        raise HTTPException(status_code=400, detail="Job must be published before sharing on WhatsApp")
+    settings = db.get(WhatsAppSettings, 1)
+    if not whatsapp_service.is_configured(settings):
+        raise HTTPException(status_code=400, detail="WhatsApp is not configured or enabled by an administrator.")
+
+    test_recipient = "9035153413"
+    base = get_public_base_url(db)
+    apply_url = f"{base}/apply/{job.public_slug}?source=whatsapp_test"
+    location = ", ".join(
+        part for part in (job.work_address, job.work_city, job.work_state) if part
+    ) or "Not specified"
+    try:
+        is_connectivity_template = settings.template_name == "hello_world"
+        media_id = None
+        body_values = None
+        if not is_connectivity_template:
+            media_id = whatsapp_service.upload_media(
+                settings,
+                generate_hiring_banner(
+                    title=job.title,
+                    location=location,
+                    salary_min=job.salary_min,
+                    salary_max=job.salary_max,
+                    apply_url=apply_url,
+                ),
+            )
+            body_values = [
+                job.title,
+                location,
+                str(job.salary_min or ""),
+                str(job.salary_max or ""),
+                apply_url,
+            ]
+        message_id = whatsapp_service.send_template(
+            settings,
+            recipient_phone=test_recipient,
+            media_id=media_id,
+            body_values=body_values,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"WhatsApp test send failed: {str(exc)[:500]}") from exc
+
+    record_audit(
+        db,
+        user_id=current_user.id,
+        action="job.whatsapp_test_send",
+        entity_type="job",
+        entity_id=job.id,
+        detail=f"recipient={test_recipient}; provider_message_id={message_id}",
+        ip_address=request.client.host if request.client else None,
+    )
+    return WhatsAppTestSendOut(
+        recipient_phone=test_recipient,
+        provider_message_id=message_id,
+    )
+
+
+@router.get("/{job_id}/whatsapp-campaign-preview", response_model=WhatsAppCampaignPreview)
+def whatsapp_campaign_preview(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_APPROVERS),
+):
+    job = db.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.PUBLISHED:
+        raise HTTPException(status_code=400, detail="Job must be published before sharing on WhatsApp")
+    settings = db.get(WhatsAppSettings, 1)
+    return WhatsAppCampaignPreview(
+        eligible_count=len(_whatsapp_candidates(job, db)),
+        whatsapp_configured=whatsapp_service.is_configured(settings),
+    )
+
+
+@router.post("/{job_id}/whatsapp-campaigns", response_model=WhatsAppCampaignOut, status_code=202)
+def create_whatsapp_campaign(
+    job_id: int,
+    body: WhatsAppCampaignCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_APPROVERS),
+):
+    if not body.confirm:
+        raise HTTPException(status_code=422, detail="Confirm the recipient count before sending.")
+    job = db.get(JobPosting, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.PUBLISHED:
+        raise HTTPException(status_code=400, detail="Job must be published before sharing on WhatsApp")
+    settings = db.get(WhatsAppSettings, 1)
+    if not whatsapp_service.is_configured(settings):
+        raise HTTPException(status_code=400, detail="WhatsApp is not configured or enabled by an administrator.")
+
+    matches = _whatsapp_candidates(job, db)
+    if not matches:
+        raise HTTPException(status_code=400, detail="No matching available candidates were found.")
+    base = get_public_base_url(db)
+    apply_url = f"{base}/apply/{job.public_slug}?source=whatsapp"
+    campaign = WhatsAppCampaign(
+        job_id=job.id,
+        created_by_id=current_user.id,
+        apply_url=apply_url,
+        recipient_count=len(matches),
+    )
+    db.add(campaign)
+    db.flush()
+    db.add_all(
+        WhatsAppCampaignRecipient(
+            campaign_id=campaign.id,
+            candidate_id=candidate.id,
+            phone_snapshot=whatsapp_service.normalize_phone(candidate.phone),
+            match_score=score,
+        )
+        for candidate, score in matches
+    )
+    record_audit(
+        db,
+        user_id=current_user.id,
+        action="job.whatsapp_campaign.queue",
+        entity_type="job",
+        entity_id=job.id,
+        detail=f"campaign_id={campaign.id}; recipients={len(matches)}",
+        ip_address=request.client.host if request.client else None,
+        commit=False,
+    )
+    db.commit()
+    from app.worker import whatsapp_send_campaign
+    whatsapp_send_campaign.delay(campaign.id)
+    return WhatsAppCampaignOut(
+        id=campaign.id,
+        status=campaign.status,
+        recipient_count=campaign.recipient_count,
+        sent_count=campaign.sent_count,
+        failed_count=campaign.failed_count,
     )
 
 
